@@ -14,6 +14,7 @@
       <div class="rail-label">WORKSPACE</div>
       <nav class="nav-list">
         <a class="nav-item active" href="#overview"><span class="nav-icon">◫</span>Overview</a>
+        <a class="nav-item" href="/identity.html"><span class="nav-icon">◇</span>Identity</a>
         <a class="nav-item" href="#activity"><span class="nav-icon">⌁</span>Activity <i class="live-dot"></i></a>
         <a class="nav-item" href="#devices"><span class="nav-icon">◉</span>Devices</a>
       </nav>
@@ -26,22 +27,25 @@
     <main class="main" id="top">
       <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong>Overview</strong></div><div class="top-actions"><span class="local-pill"><i></i> LOCAL ONLY</span><span class="clock" id="clock"></span><button class="icon-button" title="Notifications">♧<b></b></button></div></header>
       <section class="content" id="overview">
-        <div class="page-heading"><div><div class="eyebrow"><span id="today-date"></span> <span class="eyebrow-line"></span> SECURE EXECUTION</div><h1>Good afternoon<span class="heading-dot">.</span></h1><p class="subheading">Your agent can ask. Clasp decides what gets to run.</p></div><div class="heading-actions"><span class="sim-badge"><span>◌</span> SIMULATED IDENTITY</span><button class="button button-quiet" id="revoke-top">Lock session <span>↗</span></button></div></div>
+        <div class="page-heading"><div><div class="eyebrow"><span id="today-date"></span> <span class="eyebrow-line"></span> SECURE EXECUTION</div><h1>Good afternoon<span class="heading-dot">.</span></h1><p class="subheading">Your agent can ask. Clasp decides what gets to run.</p></div><div class="heading-actions"><span class="sim-badge" id="identity-mode-badge"><span>◉</span> BIOMETRIC MODE</span><button class="button button-quiet" id="revoke-top">Lock session <span>↗</span></button></div></div>
 
-        <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Development mode is active</strong><span>Identity is simulated. Vexo and Polar are not connected. Stripe calls require a test key.</span></div><button class="notice-close" aria-label="Dismiss notice">×</button></div>
+        <div class="notice"><span class="notice-icon">ⓘ</span><div><strong>Biometric authorization is fail-closed</strong><span>Payments require fresh voice-speaker and Polar PPG identity matches for the same enrolled identity. Device connectivity, audio activity, transcription, and pulse alone do not count as verification.</span></div><button class="notice-close" aria-label="Dismiss notice">×</button></div>
 
         <div class="overview-grid">
           <section class="panel identity-panel">
             <div class="panel-head"><div><div class="section-kicker">IDENTITY SESSION</div><h2>Human presence</h2></div><span class="state-pill locked" id="state-pill"><i></i><span id="identity-state">LOCKED</span></span></div>
             <div class="identity-visual" id="identity-visual"><div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="identity-core"><span class="core-lock" id="core-icon">⌑</span></div><span class="orbit-label orbit-label-a">IDENTITY</span><span class="orbit-label orbit-label-b">PRESENCE</span><span class="orbit-label orbit-label-c">CONSENT</span></div>
             <div class="identity-info"><div><span class="muted-label">PROVIDER</span><strong id="provider-name">No active session</strong></div><div class="expires-block"><span class="muted-label">SESSION EXPIRES</span><strong class="mono" id="expires">—</strong></div></div>
-            <div class="identity-actions"><button class="button button-primary" id="authenticate">Simulate identity check <span>→</span></button><button class="button button-outline" id="revoke">Revoke session</button></div>
-            <div class="identity-foot"><span class="tiny-shield">◇</span> Demo control only · No biometrics collected</div>
+            <div class="biometric-factors"><div><span>VOICE SPEAKER</span><strong id="voice-factor">UNAVAILABLE</strong><small id="voice-score">No verification yet</small></div><div><span>POLAR PPG IDENTITY</span><strong id="polar-factor">UNAVAILABLE</strong></div></div>
+            <div class="identity-actions"><button class="button button-primary" id="authenticate" hidden>Activate development simulation <span>→</span></button><button class="button button-outline" id="revoke">Lock identity</button></div>
+            <div class="identity-foot" id="identity-foot"><span class="tiny-shield">◇</span> Both real verifier matches required · no biometric adapters configured</div>
           </section>
 
           <section class="panel agent-panel">
-            <div class="panel-head"><div><div class="section-kicker">AGENT</div><h2>Clasp agent</h2></div><div class="agent-mode"><span class="agent-led"></span><span id="agent-mode">Starting…</span></div></div>
+            <div class="panel-head"><div><div class="section-kicker">AGENT</div><h2>Clasp agent</h2></div><div class="agent-mode"><span class="agent-led"></span><span id="agent-mode">Checking Google model…</span></div></div>
             <div class="agent-intro"><div class="agent-avatar"><span>c</span><i></i></div><div><strong>What should I do?</strong><p>Requests for sensitive tools are checked by Clasp at execution time.</p></div></div>
+            <div class="model-detail" id="model-detail">Waiting for Google model status…</div>
+            <div class="voice-interaction"><button class="button button-primary" id="voice-talk" disabled>Speak to Clasp using Vexo <span>→</span></button><small id="voice-status">Connect Vexo. Voice capture and ECAPA matching run locally on this Mac.</small></div>
             <div class="chat-suggestions"><button class="suggestion" data-prompt="Pay $5 to the demo merchant">Pay $5 to demo merchant <span>↗</span></button><button class="suggestion muted-suggestion" data-prompt="Pay $25 to the demo merchant">Try over-limit request <span>↗</span></button></div>
             <div class="chat-thread" id="chat-thread"><div class="thread-empty" id="thread-empty"><span>✳</span><p>Ask for a test payment to see Clasp in action.</p></div></div>
             <form class="chat-form" id="chat-form"><span class="chat-spark">✳</span><input id="chat-input" autocomplete="off" placeholder="Ask Clasp to do something…" maxlength="1000"/><button aria-label="Send request" type="submit">↑</button></form>
@@ -49,13 +53,17 @@
           </section>
         </div>
 
+        <section class="section-block" id="voice-setup"><div class="section-title"><div><div class="section-kicker">LOCAL VOICE PROFILE</div><h2>Voice registration and testing</h2></div></div><div class="voice-cards">
+          <article class="panel voice-card"><h3>1. Register voice</h3><p>Read aloud: “Today I am setting up my voice profile. I speak clearly and naturally so Clasp can recognize my voice when I make a request.”</p><p id="voice-enrollment">No voice profile registered.</p><button class="button button-primary" id="voice-register" disabled>Start recording</button> <button class="button button-outline" id="voice-stop" disabled>Stop recording</button><p id="voice-progress">Connect Vexo to begin. Recording stops automatically after 10 seconds.</p></article>
+          <article class="panel voice-card"><h3>2. Test voice</h3><p>Read aloud: “A quiet morning is a good time to plan the day. I can ask my assistant to help me with the tasks ahead.”</p><p>Anyone may test against the enrolled profile. Testing does not replace it.</p><button class="button button-outline" id="voice-test" disabled>Start test</button><p id="voice-test-result">No test yet.</p></article>
+        </div></section>
         <section class="payment-result" id="payment-result" aria-live="polite"><div class="result-icon">＄</div><div class="result-copy"><span class="section-kicker">LATEST STRIPE TEST RESULT</span><strong id="payment-result-title">No test transaction yet</strong><small id="payment-result-detail">A protected payment result will appear here.</small></div><span class="result-mode">TEST MODE ONLY</span></section>
 
         <section class="section-block" id="devices">
           <div class="section-title"><div><div class="section-kicker">SIGNAL SOURCES</div><h2>Connected devices</h2></div><a class="text-link" href="/vexo-open-kit/dashboard/" target="_blank" rel="noreferrer">Open Vexo kit <span>↗</span></a></div>
           <div class="device-grid">
-            <article class="panel device-card"><div class="device-top"><div class="device-icon vexo-icon">⌁</div><span class="device-state"><i></i> NOT CONNECTED</span></div><div class="device-name-row"><div><h3>Vexo band</h3><p>Motion · microphone · LED</p></div><span class="device-chevron">↗</span></div><div class="device-bottom"><span>ADAPTER</span><strong>No adapter configured</strong></div></article>
-            <article class="panel device-card"><div class="device-top"><div class="device-icon polar-icon">〰</div><span class="device-state"><i></i> NOT CONNECTED</span></div><div class="device-name-row"><div><h3>Polar Verity Sense</h3><p>PPG · wearable presence</p></div><span class="device-chevron">↗</span></div><div class="device-bottom"><span>ADAPTER</span><strong>PPG matching not implemented</strong></div></article>
+            <article class="panel device-card"><div class="device-top"><div class="device-icon vexo-icon">⌁</div><span class="device-state" id="vexo-state"><i></i> NOT CONNECTED</span></div><div class="device-name-row"><div><h3>Vexo band</h3><p id="vexo-device-detail">Vexo Open Kit · Bluetooth · configured band</p></div><span class="device-chevron">↗</span></div><div class="device-bottom"><span>LIVE SIGNAL</span><strong id="vexo-live-detail">Waiting for connection</strong></div><div class="device-controls"><button class="mini-button" id="vexo-connect" disabled>Connect band</button><button class="mini-button" id="vexo-disconnect" hidden>Disconnect</button><button class="mini-button mic-button" id="vexo-mic" disabled>Start microphone</button></div><p class="device-note" id="vexo-message">Connect in Chrome or Edge. The browser chooser is filtered to the configured band.</p></article>
+            <article class="panel device-card"><div class="device-top"><div class="device-icon polar-icon">〰</div><span class="device-state"><i></i> VERIFIER UNAVAILABLE</span></div><div class="device-name-row"><div><h3>Polar Verity Sense</h3><p>PPG identity verifier</p></div><span class="device-chevron">↗</span></div><div class="device-bottom"><span>IDENTITY MATCH</span><strong>Separate PaPaGei module will be merged</strong></div></article>
             <article class="panel device-card policy-card"><div class="device-top"><div class="device-icon policy-icon">◈</div><span class="policy-status"><i></i> ENFORCED</span></div><div class="device-name-row"><div><h3>Authorization policy</h3><p>Fail-closed · tool-level checks</p></div></div><div class="device-bottom"><span>PAYMENT LIMIT</span><strong id="payment-limit">$5.00 · USD · demo merchant</strong></div></article>
           </div>
         </section>

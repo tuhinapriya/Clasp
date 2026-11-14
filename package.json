@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node --import tsx --test test/*.test.ts && .venv/bin/python -m unittest discover -s test_py",
     "check": "tsc --noEmit",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "setup:vexo": "python3 -m venv .venv && .venv/bin/python -m pip install \"bleak>=0.21\"",
+    "setup:voice": ".venv/bin/python -m pip install \"av>=16,<17\" \"speechbrain>=1.1,<2\" \"mlx-whisper>=0.4,<1\""
   },
   "dependencies": {
     "@mastra/core": "latest",

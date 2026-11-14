@@ -1,0 +1,2 @@
+[console_scripts]
+clasp-ppg = clasp_ppg.cli:main

@@ -17,6 +17,7 @@ export type AuthDecision = {
   checkedAt: string;
 };
 export type PaymentArgs = { amountCents: number; merchantId: string; currency: string };
+export type SessionGuard = () => { valid: boolean; reason: string };
 type Policy = (args: PaymentArgs) => string | null;
 
 const policies: Record<string, Policy> = {
@@ -38,10 +39,16 @@ export class AuthorizationService {
   private providerName: string | null = null;
   private simulated = false;
 
-  constructor(private readonly provider: IdentityProvider, private readonly ttlSeconds = Number(process.env.SESSION_TTL_SECONDS ?? 120), private readonly now = () => Date.now()) {}
+  constructor(
+    private readonly provider: IdentityProvider,
+    private readonly ttlSeconds = Number(process.env.SESSION_TTL_SECONDS ?? 120),
+    private readonly now = () => Date.now(),
+    private readonly sessionGuard?: SessionGuard,
+  ) {}
 
   snapshot(): IdentitySnapshot {
     this.expireIfNeeded();
+    this.enforceCurrentIdentity();
     return { state: this.state, sessionId: this.sessionId, expiresAt: this.expiresAtMs ? new Date(this.expiresAtMs).toISOString() : null, provider: this.providerName, simulated: this.simulated };
   }
 
@@ -72,8 +79,9 @@ export class AuthorizationService {
     return this.snapshot();
   }
 
-  authorize(toolName: string, args: PaymentArgs): AuthDecision {
+  authorize(toolName: string, args: PaymentArgs, phase: 'preflight' | 'execution' = 'execution'): AuthDecision {
     this.expireIfNeeded();
+    this.enforceCurrentIdentity();
     const checkedAt = new Date(this.now()).toISOString();
     const identityState = this.state;
     let reason = '';
@@ -81,7 +89,7 @@ export class AuthorizationService {
     else if (identityState !== 'AUTHENTICATED' || !this.sessionId) reason = identityState === 'EXPIRED' ? 'Authentication session expired.' : 'No active authenticated identity session.';
     else reason = policies[toolName]!(args) ?? '';
     const decision: AuthDecision = { allowed: !reason, reason: reason || 'Authenticated session and tool policy passed.', identityState, sessionId: this.sessionId, checkedAt };
-    publish('authorization.decision', { tool: toolName, requestedAction: { amountCents: args.amountCents, merchantId: args.merchantId, currency: args.currency }, ...decision, simulated: this.simulated });
+    publish('authorization.decision', { phase, tool: toolName, requestedAction: { amountCents: args.amountCents, merchantId: args.merchantId, currency: args.currency }, ...decision, simulated: this.simulated });
     return decision;
   }
 
@@ -92,5 +100,11 @@ export class AuthorizationService {
       this.sessionId = null;
       publish('identity.expired', { expiredSessionId, reason: 'Authentication session expired.' });
     }
+  }
+
+  private enforceCurrentIdentity() {
+    if (this.state !== 'AUTHENTICATED' || !this.sessionGuard) return;
+    const result = this.sessionGuard();
+    if (!result.valid) this.revoke(result.reason || 'Current identity verification is uncertain.');
   }
 }

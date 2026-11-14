@@ -1,7 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { AuthorizationService } from '../auth/authorization.js';
 import { ProtectedPaymentTool } from '../payments/test-payment.js';
 
 const paymentTool = (payments: ProtectedPaymentTool) => createTool({
@@ -14,7 +13,7 @@ const paymentTool = (payments: ProtectedPaymentTool) => createTool({
   execute: async ({ amountUsd, merchantId }) => payments.execute({ amountUsd, merchantId }),
 });
 
-export function createClaspAgent(auth: AuthorizationService, payments: ProtectedPaymentTool) {
+export function createClaspAgent(payments: ProtectedPaymentTool) {
   const merchantId = process.env.CLASP_DEMO_MERCHANT_ID ?? 'clasp_demo_merchant';
   const model = process.env.MODEL_ID ?? 'google/gemini-3.8-flash';
   const agent = new Agent({
@@ -27,11 +26,3 @@ export function createClaspAgent(auth: AuthorizationService, payments: Protected
   return agent;
 }
 
-export function localDemoIntent(text: string, merchantId = process.env.CLASP_DEMO_MERCHANT_ID ?? 'clasp_demo_merchant') {
-  const money = text.match(/\$\s*(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:dollars?|usd)\b/i);
-  if (!money || !/\b(pay|payment|purchase|charge|send)\b/i.test(text)) return null;
-  const amountUsd = Number(money[1] ?? money[2]);
-  return { amountUsd, merchantId };
-}
-
-export function identityForAgent(auth: AuthorizationService) { return auth.snapshot(); }

@@ -42,6 +42,6 @@ export class SimulatedIdentityProvider implements IdentityProvider {
 }
 
 export const hardwareState = {
-  vexo: { status: 'disconnected' as ConnectionStatus, detail: 'No adapter configured' },
+  vexo: { status: 'disconnected' as ConnectionStatus, detail: 'No adapter configured', name: null as string | null, bandNumber: null as number | null, microphoneOn: false },
   polar: { status: 'disconnected' as ConnectionStatus, detail: 'No adapter configured; PPG matching is not implemented' },
 };

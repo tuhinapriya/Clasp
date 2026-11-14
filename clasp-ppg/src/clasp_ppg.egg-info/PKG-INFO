@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: clasp-ppg
+Version: 0.1.0
+Summary: Local Polar Verity Sense PPG capture and experimental verification module for Clasp
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.11
+Requires-Dist: polar-ble-sdk @ git+https://github.com/PhelaPoscam/Polar-Python-SDK.git@1ca19a44096e34c0ad0edef95db63d1ea051ed0f
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Provides-Extra: papagei
+Requires-Dist: torch>=2.0; extra == "papagei"

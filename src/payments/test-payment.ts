@@ -30,6 +30,7 @@ export class StripeTestGateway implements PaymentGateway {
       metadata: input.metadata,
       payment_method: 'pm_card_visa',
       confirm: true,
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
     }, { idempotencyKey });
     return { id: result.id, status: result.status, livemode: result.livemode, amount: result.amount, currency: result.currency, amount_received: result.amount_received };
   }
@@ -49,28 +50,31 @@ export class ProtectedPaymentTool {
     return run;
   }
 
+  private deny(requestId: string, requestedAction: Record<string, unknown>, identityState: string, reason: string) {
+    const outcome: PaymentOutcome = { ok: false, decision: 'DENY', reason, stripeCalled: false };
+    publish('audit.entry', { requestId, requestedAction, identityState, decision: 'DENY', reason, executionOutcome: 'blocked', externalApiInvoked: false });
+    publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
+    return outcome;
+  }
+
   private async runOnce(input: { amountUsd: number; merchantId: string }, requestId: string): Promise<PaymentOutcome> {
     const args = { amountCents: Math.round(input.amountUsd * 100), merchantId: input.merchantId, currency: process.env.STRIPE_CURRENCY ?? 'usd' };
     publish('agent.tool.requested', { requestId, tool: 'create_test_payment', requestedAction: { amountUsd: input.amountUsd, merchantId: input.merchantId, currency: args.currency } });
 
-    // The authorization check is deliberately adjacent to the only Stripe invocation below.
-    const decision = this.auth.authorize('create_test_payment', args);
-    if (!decision.allowed) {
-      const outcome: PaymentOutcome = { ok: false, decision: 'DENY', reason: decision.reason, stripeCalled: false };
-      publish('audit.entry', { requestId, requestedAction: { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId }, identityState: decision.identityState, decision: 'DENY', reason: decision.reason, executionOutcome: 'blocked', externalApiInvoked: false });
-      publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
-      return outcome;
-    }
+    const requestedAction = { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId };
+    const preflight = this.auth.authorize('create_test_payment', args, 'preflight');
+    if (!preflight.allowed) return this.deny(requestId, requestedAction, preflight.identityState, preflight.reason);
+
+    // Re-check policy and current biometric evidence immediately before the external side effect.
+    const decision = this.auth.authorize('create_test_payment', args, 'execution');
+    if (!decision.allowed) return this.deny(requestId, requestedAction, decision.identityState, decision.reason);
 
     let gateway: PaymentGateway;
     try {
       gateway = this.gatewayFactory();
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Stripe test mode is not configured.';
-      const outcome: PaymentOutcome = { ok: false, decision: 'ALLOW', reason, stripeCalled: false };
-      publish('audit.entry', { requestId, requestedAction: { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId }, identityState: decision.identityState, decision: 'ALLOW', reason, executionOutcome: 'not-executed-missing-credentials', externalApiInvoked: false });
-      publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
-      return outcome;
+      return this.deny(requestId, requestedAction, decision.identityState, reason);
     }
 
     try {
@@ -82,13 +86,13 @@ export class ProtectedPaymentTool {
       }, `clasp-${requestId}`);
       if (result.livemode) throw new Error('Stripe returned a live-mode PaymentIntent; refusing to report it as a demo payment.');
       const outcome: PaymentOutcome = { ok: result.status === 'succeeded', decision: 'ALLOW', reason: result.status === 'succeeded' ? decision.reason : `Stripe test payment status: ${result.status}.`, stripeCalled: true, paymentIntent: { id: result.id, status: result.status, livemode: false, amount: result.amount, currency: result.currency, amountReceived: result.amount_received } };
-      publish('audit.entry', { requestId, requestedAction: { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId }, identityState: decision.identityState, decision: 'ALLOW', reason: decision.reason, executionOutcome: result.status, externalApiInvoked: true, paymentIntentId: result.id });
+      publish('audit.entry', { requestId, requestedAction, identityState: decision.identityState, decision: 'ALLOW', reason: decision.reason, executionOutcome: result.status, externalApiInvoked: true, paymentIntentId: result.id });
       publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
       return outcome;
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Stripe test request failed.';
       const outcome: PaymentOutcome = { ok: false, decision: 'ALLOW', reason, stripeCalled: true };
-      publish('audit.entry', { requestId, requestedAction: { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId }, identityState: decision.identityState, decision: 'ALLOW', reason, executionOutcome: 'stripe-error', externalApiInvoked: true });
+      publish('audit.entry', { requestId, requestedAction, identityState: decision.identityState, decision: 'ALLOW', reason, executionOutcome: 'stripe-error', externalApiInvoked: true });
       publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
       return outcome;
     }

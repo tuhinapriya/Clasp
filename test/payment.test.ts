@@ -31,3 +31,9 @@ test('authorized action reaches Stripe once and duplicate request is idempotent'
   assert.deepEqual(duplicate, first);
   assert.equal(calls, 1);
 });
+
+
+test('StripeTestGateway refuses live credentials before any API call', async () => {
+  const { StripeTestGateway } = await import('../src/payments/test-payment.js');
+  assert.throws(() => new StripeTestGateway('sk_live_never_use'), /test-mode credentials/);
+});

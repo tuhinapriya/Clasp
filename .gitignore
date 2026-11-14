@@ -1,9 +1,13 @@
 .env
 .env.*
 !.env.example
+.clasp/
 node_modules/
 .venv/
 dist/
 *.log
 .DS_Store
 vexo-open-kit/
+
+__pycache__/
+*.py[cod]
