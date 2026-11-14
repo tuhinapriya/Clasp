@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+papagei = ["torch>=2.0"]
 
 [project.scripts]
 clasp-ppg = "clasp_ppg.cli:main"

@@ -29,6 +29,13 @@ def main() -> None:
     experiment.add_argument("--papagei-source", type=Path, required=True, help="official PaPaGei repository clone")
     experiment.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "weights" / "papagei_p.pt")
     experiment.add_argument("--resume-run-id", help="continue an interrupted current run using only its accepted sessions")
+    placement = commands.add_parser("placement-experiment", help="guided normal/tight/loose/repositioned Wearer 1 study")
+    placement.add_argument("--device")
+    placement.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[2] / "data" / "placement")
+    placement.add_argument("--settle-seconds", type=int, default=25)
+    placement.add_argument("--papagei-source", type=Path, required=True)
+    placement.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "weights" / "papagei_p.pt")
+    placement.add_argument("--threshold", type=float, default=.80)
     args = parser.parse_args()
     if args.command == "scan":
         asyncio.run(_scan(args.timeout))
@@ -36,7 +43,7 @@ def main() -> None:
         asyncio.run(_record(args))
     elif args.command == "evaluate":
         _evaluate(args.data_dir)
-    else:
+    elif args.command == "experiment":
         from .controlled import run_controlled_experiment
 
         try:
@@ -48,6 +55,14 @@ def main() -> None:
                 settle_seconds=args.settle_seconds,
                 resume_run_id=args.resume_run_id,
             ))
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
+    else:
+        from .placement import run_placement_experiment
+        try:
+            asyncio.run(run_placement_experiment(device=args.device, data_dir=args.data_dir,
+                papagei_source=args.papagei_source, checkpoint=args.checkpoint,
+                settle_seconds=args.settle_seconds, threshold=args.threshold))
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             raise SystemExit(str(exc)) from exc
 

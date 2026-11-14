@@ -1,6 +1,6 @@
 # Clasp PPG module
 
-Portable, local Python code for Polar Verity Sense raw PPG capture and an experimental one-to-one morphology matcher. It captures PPG only; accelerometer data is not required. It has no dependency on Clasp's gateway, UI, agent, Stripe, a LAN, or another computer. Keep this folder together when copying it into the main Clasp repository.
+Portable, local Python code for Polar Verity Sense raw PPG capture, timestamped accelerometer capture, an experimental one-to-one morphology matcher, and a PaPaGei window verifier. It has no dependency on Clasp's gateway, UI, agent, Stripe, a LAN, or another computer. Keep this folder together when copying it into the main Clasp repository.
 
 ## Hardware and setup
 
@@ -57,7 +57,7 @@ result = verify("demo_person", second_session, store)
 print(quality.label, result.decision, result.score, result.reason)
 ```
 
-`PolarPPG.status` exposes `connected`, `streaming`, `device_name`, `device_address`, `last_sample_at`, `signal_quality`, and `error`. `capture()` returns a `Capture` and can write `ppg_samples.csv` plus `metadata.json`. The CSV keeps sample index, estimated sensor-clock timestamp, and raw integer channel values. Within a PMD packet, timestamps are reconstructed from the packet's last-sample timestamp and nominal configured sample rate; they are not claimed as UTC. `assess_quality()` marks short, flat, non-finite, or empty recordings unusable. `enroll()`, `calibrate()`, and `verify()` only operate on captures supplied to them; they never invent live input.
+`PolarPPG.status` exposes `connected`, `streaming`, `acc_streaming`, `physiological_signal_present`, `device_name`, `device_address`, `last_sample_at`, `signal_quality`, and `error`. `capture()` returns a `Capture` and can write `ppg_samples.csv`, `acc_samples.csv`, and `metadata.json`. The CSVs keep sample index, estimated Polar sensor-clock timestamp, and raw integer values. Within a PMD packet, timestamps are reconstructed from the packet's last-sample timestamp and nominal configured sample rate; they are not claimed as UTC. `assess_quality()` marks short, flat, non-finite, or empty PPG recordings unusable. `enroll()`, `calibrate()`, and `verify()` only operate on captures supplied to them; they never invent live input.
 
 ## Experimental matcher and evaluation
 
@@ -88,11 +88,15 @@ curl -L https://zenodo.org/api/records/13983110/files/papagei_p.pt/content -o we
 clasp-ppg experiment --papagei-source /tmp/papagei-official
 ```
 
-The command records raw PPG locally, summarizes measured sample clock, missing packet samples, raw amplitude/clipping, pulse-cycle regularity, usable duration, and valid 10-second windows, then rejects poor sessions and asks for a retake. The current BLE integration does not collect accelerometer data, so motion is reported as unavailable. The default quality gate requires at least 85 seconds usable, sample clock within 2% of its configured rate, estimated missing samples no greater than 0.5%, no integer-rail or sustained-extreme clipping indication, at least 25 identifiable pulse cycles, at least 8 valid 10-second windows, pulse interval coefficient of variation no greater than 0.50 when measurable, and no PPG stream errors. These are conservative experiment acceptance checks, not identity thresholds.
+The historical controlled command records raw PPG locally, summarizes measured sample clock, missing packet samples, raw amplitude/clipping, pulse-cycle regularity, usable duration, and valid 10-second windows, then rejects poor sessions and asks for a retake. That earlier run did not capture accelerometer data; the new live motion-aware verifier does. The historical command's default quality gate requires at least 85 seconds usable, sample clock within 2% of its configured rate, estimated missing samples no greater than 0.5%, no integer-rail or sustained-extreme clipping indication, at least 25 identifiable pulse cycles, at least 8 valid 10-second windows, pulse interval coefficient of variation no greater than 0.50 when measurable, and no PPG stream errors. These are conservative experiment acceptance checks, not identity thresholds.
 
 Accepted and rejected attempts are kept separately under a unique `data/controlled_ppg/controlled_<timestamp>_<id>/` folder. Only four accepted sessions are compared. The command writes `CONTROLLED_PPG_EVALUATION.md` and `results.json` there, with PaPaGei cosine similarity, handcrafted normalized pulse-template distance, session quality, usable windows, and genuine-versus-impostor ranking. No threshold is fit; live verification remains fail-closed. Do not commit the raw recordings or results containing participant biometric data.
 
 If a run is interrupted after one or more accepted sessions, resume only that run with `--resume-run-id controlled_<timestamp>_<id>`. The command validates accepted session labels, skips those sessions from the current run, and never imports recordings from another run. Terminal confirmations are read without blocking the BLE event loop, and the device reconnects before a new stabilization sample if its connection was lost.
+
+## Motion-aware verifier and placement experiment
+
+The local Polar adapter also requests the real Verity Sense accelerometer stream, saves timestamped raw PPG and ACC, and exposes the experimental PaPaGei three-window verifier. It checks that actual PPG and ACC packets arrive before reporting `streaming=True`. Run the guided placement study with `clasp-ppg placement-experiment --papagei-source /path/to/papagei-foundation-model`. Its provisional threshold, experimental motion/PPG quality gate, and current live-stream smoke-test outcome are documented in [MOTION_AWARE_VERIFICATION.md](MOTION_AWARE_VERIFICATION.md); do not treat its MATCH output as production authorization.
 
 ## Data and privacy
 
