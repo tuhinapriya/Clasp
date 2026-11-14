@@ -73,9 +73,30 @@ clasp-ppg evaluate --data-dir data
 
 `evaluate_labeled()` and the CLI report pairwise genuine/impostor morphology scores and identify pairs involving a `rewear` session. This is a descriptive feasibility report, not an FAR/FRR estimate. In the initial live two-participant check, one genuine rewear score (0.0405) exceeded both impostor scores (0.0088, 0.0206), so there is no separating threshold; this baseline currently cannot distinguish these samples. Do not train/test on adjacent windows as if they were independent people. The Verity Sense reports skin contact unreliably; signal quality and connection state cannot establish liveness, consent, or identity. Keep the Clasp gateway as the final authorization point and fail closed when PPG is missing or poor.
 
+## Guided controlled biometric experiment
+
+The interactive command collects four fresh, labeled 90-second sessions in order: `WEARER_1` enrollment, `WEARER_1` rewear verification, `WEARER_2` impostor, and `WEARER_1` second rewear verification. Before every stabilization and recording attempt it displays the requested wearer and placement instructions, then requires the operator to type the exact wearer label and `SAME_LOCATION`. The software never infers who is wearing the sensor. Each confirmed placement gets a 20–30 second live stabilization sample (25 seconds by default) that is discarded; the operator must then type `START` for the 90-second recording. Every retake repeats these checks.
+
+Run it in an environment that has both the Polar BLE dependencies and the PaPaGei model dependencies installed. Clone PaPaGei and use its official checkpoint in the ignored local `weights/` directory:
+
+```sh
+git clone https://github.com/Nokia-Bell-Labs/papagei-foundation-model /tmp/papagei-official
+# In the experiment Python environment, install clasp-ppg plus torch, scikit-learn, matplotlib, and tqdm.
+python -m pip install -e . torch scikit-learn matplotlib tqdm
+mkdir -p weights
+curl -L https://zenodo.org/api/records/13983110/files/papagei_p.pt/content -o weights/papagei_p.pt
+clasp-ppg experiment --papagei-source /tmp/papagei-official
+```
+
+The command records raw PPG locally, summarizes measured sample clock, missing packet samples, raw amplitude/clipping, pulse-cycle regularity, usable duration, and valid 10-second windows, then rejects poor sessions and asks for a retake. The current BLE integration does not collect accelerometer data, so motion is reported as unavailable. The default quality gate requires at least 85 seconds usable, sample clock within 2% of its configured rate, estimated missing samples no greater than 0.5%, no integer-rail or sustained-extreme clipping indication, at least 25 identifiable pulse cycles, at least 8 valid 10-second windows, pulse interval coefficient of variation no greater than 0.50 when measurable, and no PPG stream errors. These are conservative experiment acceptance checks, not identity thresholds.
+
+Accepted and rejected attempts are kept separately under a unique `data/controlled_ppg/controlled_<timestamp>_<id>/` folder. Only four accepted sessions are compared. The command writes `CONTROLLED_PPG_EVALUATION.md` and `results.json` there, with PaPaGei cosine similarity, handcrafted normalized pulse-template distance, session quality, usable windows, and genuine-versus-impostor ranking. No threshold is fit; live verification remains fail-closed. Do not commit the raw recordings or results containing participant biometric data.
+
+If a run is interrupted after one or more accepted sessions, resume only that run with `--resume-run-id controlled_<timestamp>_<id>`. The command validates accepted session labels, skips those sessions from the current run, and never imports recordings from another run. Terminal confirmations are read without blocking the BLE event loop, and the device reconnects before a new stabilization sample if its connection was lost.
+
 ## Data and privacy
 
-Raw PPG and enrollment templates are biometric data. The default CLI writes locally under `data/`; do not commit captures, templates, device addresses, or other participant information. Obtain informed consent for every participant. Before sharing a capture, redact the device address from `metadata.json`. Captures and templates are not encrypted by this prototype.
+Raw PPG and enrollment templates are biometric data. The default CLI writes locally under `data/`; do not commit captures, templates, device addresses, or identifying participant metadata. Obtain informed consent for every participant. Before sharing a capture, redact the device address from `metadata.json`. Captures and templates are not encrypted by this prototype. Derived research reports may be shared only with explicit approval and pseudonymous wearer labels.
 
 ## Research references
 

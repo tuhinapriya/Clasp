@@ -22,13 +22,34 @@ def main() -> None:
     record.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[2] / "data")
     evaluation = commands.add_parser("evaluate", help="report labeled pairwise session scores")
     evaluation.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[2] / "data")
+    experiment = commands.add_parser("experiment", help="guided four-session Polar PPG biometric experiment")
+    experiment.add_argument("--device", help="Polar BLE name/address; omit to discover nearby sensor")
+    experiment.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parents[2] / "data" / "controlled_ppg")
+    experiment.add_argument("--settle-seconds", type=int, default=25, help="placement stabilization duration (20-30 seconds)")
+    experiment.add_argument("--papagei-source", type=Path, required=True, help="official PaPaGei repository clone")
+    experiment.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "weights" / "papagei_p.pt")
+    experiment.add_argument("--resume-run-id", help="continue an interrupted current run using only its accepted sessions")
     args = parser.parse_args()
     if args.command == "scan":
         asyncio.run(_scan(args.timeout))
     elif args.command == "record":
         asyncio.run(_record(args))
-    else:
+    elif args.command == "evaluate":
         _evaluate(args.data_dir)
+    else:
+        from .controlled import run_controlled_experiment
+
+        try:
+            asyncio.run(run_controlled_experiment(
+                data_dir=args.data_dir,
+                device=args.device,
+                papagei_source=args.papagei_source,
+                checkpoint=args.checkpoint,
+                settle_seconds=args.settle_seconds,
+                resume_run_id=args.resume_run_id,
+            ))
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            raise SystemExit(str(exc)) from exc
 
 
 async def _scan(timeout: float) -> None:
