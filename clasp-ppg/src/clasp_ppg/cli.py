@@ -36,6 +36,9 @@ def main() -> None:
     placement.add_argument("--papagei-source", type=Path, required=True)
     placement.add_argument("--checkpoint", type=Path, default=Path(__file__).resolve().parents[2] / "weights" / "papagei_p.pt")
     placement.add_argument("--threshold", type=float, default=.80)
+    diagnose = commands.add_parser("diagnose-streams", help="compare live Polar PPG-only, ACC-only, and combined PMD streams")
+    diagnose.add_argument("--device", help="Polar BLE name/address; omit to discover nearby sensor")
+    diagnose.add_argument("--duration", type=float, default=10, help="seconds to count real notifications per configuration")
     args = parser.parse_args()
     if args.command == "scan":
         asyncio.run(_scan(args.timeout))
@@ -43,6 +46,8 @@ def main() -> None:
         asyncio.run(_record(args))
     elif args.command == "evaluate":
         _evaluate(args.data_dir)
+    elif args.command == "diagnose-streams":
+        asyncio.run(_diagnose_streams(args))
     elif args.command == "experiment":
         from .controlled import run_controlled_experiment
 
@@ -77,10 +82,46 @@ async def _scan(timeout: float) -> None:
         print(f"{name}\t{address}")
 
 
+async def _diagnose_streams(args) -> None:
+    from .device import PolarPPG
+
+    configs = (("PPG_ONLY_135HZ", True, False), ("ACC_ONLY_52HZ", False, True), ("PPG_PLUS_ACC", True, True))
+    results = []
+    for label, ppg, acc in configs:
+        sensor = PolarPPG(device=args.device, stream_ppg=ppg, stream_accelerometer=acc)
+        item = {"configuration": label, "requested_ppg_rate_hz": 135 if ppg else None,
+                "requested_acc_rate_hz": 52 if acc else None}
+        try:
+            status = await sensor.connect()
+            item["connect_status"] = {"connected": status.connected, "streaming_with_packets": status.streaming,
+                "ppg_streaming": status.ppg_streaming, "acc_streaming": status.acc_streaming, "error": status.error}
+            if status.connected:
+                item.update(await sensor.diagnostic_listen(args.duration))
+                item["post_listen_status"] = {"connected": sensor.status.connected,
+                    "streaming_with_packets": sensor.status.streaming,
+                    "ppg_streaming": sensor.status.ppg_streaming,
+                    "acc_streaming": sensor.status.acc_streaming, "error": sensor.status.error}
+            else:
+                item.update({"callback_deltas": {"ppg_packets": 0, "ppg_samples": 0, "acc_packets": 0,
+                    "acc_samples": 0, "pmd_raw_notifications": 0}, "stream_errors": {}})
+        except Exception as exc:
+            item["diagnostic_error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            try:
+                await sensor.disconnect()
+            except Exception as exc:
+                item["disconnect_error"] = f"{type(exc).__name__}: {exc}"
+        results.append(item)
+        print(json.dumps(item, indent=2, default=str), flush=True)
+    print(json.dumps({"summary": "Real Polar PMD notification diagnostics; no raw sample files saved", "configurations": results}, indent=2, default=str))
+
+
 async def _record(args) -> None:
     sensor = PolarPPG(device=args.device)
     try:
         status = await sensor.connect()
+        if status.connected:
+            await sensor.wait_for_streaming(20.0)
         if not status.connected or not status.streaming:
             print(json.dumps(status.__dict__, default=str, indent=2))
             raise SystemExit(2)

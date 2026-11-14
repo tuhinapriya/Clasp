@@ -32,6 +32,8 @@ from clasp_ppg.storage import capture_matrix, load_capture
 async def record():
     sensor = PolarPPG()
     status = await sensor.connect()
+    if status.connected:
+        await sensor.wait_for_streaming(timeout_s=20)
     if not status.connected or not status.streaming:
         raise RuntimeError(status.error or "PPG stream unavailable")
     try:
@@ -97,6 +99,8 @@ If a run is interrupted after one or more accepted sessions, resume only that ru
 ## Motion-aware verifier and placement experiment
 
 The local Polar adapter also requests the real Verity Sense accelerometer stream, saves timestamped raw PPG and ACC, and exposes the experimental PaPaGei three-window verifier. It checks that actual PPG and ACC packets arrive before reporting `streaming=True`. Run the guided placement study with `clasp-ppg placement-experiment --papagei-source /path/to/papagei-foundation-model`. Its provisional threshold, experimental motion/PPG quality gate, and current live-stream smoke-test outcome are documented in [MOTION_AWARE_VERIFICATION.md](MOTION_AWARE_VERIFICATION.md); do not treat its MATCH output as production authorization.
+
+To compare Polar PMD streams independently without saving raw samples, run `clasp-ppg diagnose-streams --duration 10`. It tests PPG-only 135 Hz, ACC-only 52 Hz, then PPG+ACC, and reports callback counts, decoded samples, raw PMD notifications, negotiated settings, BLE status and SDK stream errors for each fresh connection. The latest live placement results are summarized in [research/placement/PLACEMENT_EXPERIMENT.md](research/placement/PLACEMENT_EXPERIMENT.md); raw PPG/ACC samples remain local and ignored by Git.
 
 ## Data and privacy
 

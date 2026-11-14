@@ -1,0 +1,444 @@
+{
+  "threshold": 0.8,
+  "threshold_status": "provisional_not_production_calibrated",
+  "comparisons": [
+    {
+      "condition": "normal",
+      "similarity_scores": [
+        0.8978908208986242,
+        0.897890765979037
+      ],
+      "mean_similarity": 0.8978907934388306,
+      "quality_approved_windows": 2,
+      "windows_at_provisional_threshold": 2,
+      "quality": {
+        "overlap_duration_s": 30.801605331,
+        "ppg_samples_total": 4321,
+        "acc_samples_total": 1627,
+        "ppg_packet_clock": {
+          "nominal_rate_hz": 135,
+          "observed_rate_hz": 135.12551236071045,
+          "inter_packet_missing_samples_estimate": 42,
+          "packet_count": 87
+        },
+        "acc_packet_clock": {
+          "nominal_rate_hz": 52,
+          "observed_rate_hz": 52.15003414066268,
+          "inter_packet_missing_samples_estimate": 16,
+          "packet_count": 21
+        },
+        "quality_approved_windows": 2,
+        "windows": [
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1352,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 4988.0,
+              "ppg_std_counts": 1672.6682329145106,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 12,
+              "heart_rate_bpm_estimate": 78.26086956521739,
+              "pulse_interval_cv": 0.050495959961511426,
+              "acc_gravity_magnitude_mg": 1004.7979892612591,
+              "motion_dynamic_rms_mg": 12.141091566476902,
+              "motion_dynamic_p95_mg": 21.72432705072782,
+              "ppg_acc_nearest_sample_p95_ms": 18.4024207,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 3186.0,
+              "ppg_std_counts": 903.9294374933874,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 13,
+              "heart_rate_bpm_estimate": 88.04347826086956,
+              "pulse_interval_cv": 0.22394306048962923,
+              "acc_gravity_magnitude_mg": 1008.1103609363664,
+              "motion_dynamic_rms_mg": 34.62124280013201,
+              "motion_dynamic_p95_mg": 72.35978500269837,
+              "ppg_acc_nearest_sample_p95_ms": 18.430851,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": false,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 11077.0,
+              "ppg_std_counts": 3294.9365301082917,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 10,
+              "heart_rate_bpm_estimate": 66.12244897959184,
+              "pulse_interval_cv": 0.30847851583024866,
+              "acc_gravity_magnitude_mg": 1023.6430039994962,
+              "motion_dynamic_rms_mg": 84.74140432944567,
+              "motion_dynamic_p95_mg": 152.27525172834964,
+              "ppg_acc_nearest_sample_p95_ms": 18.2954655,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": [
+              "excessive_motion"
+            ]
+          }
+        ]
+      },
+      "held_out_historical_impostor_similarity": 0.1251063258877383,
+      "genuine_mean_above_impostor": true,
+      "mean_minus_impostor": 0.7727844675510923,
+      "genuine_windows_above_impostor_max": 0
+    },
+    {
+      "condition": "tighter",
+      "similarity_scores": [
+        0.7790903768907221,
+        0.798586451718334,
+        0.9312647179862226
+      ],
+      "mean_similarity": 0.8363138488650929,
+      "quality_approved_windows": 3,
+      "windows_at_provisional_threshold": 1,
+      "quality": {
+        "overlap_duration_s": 30.448915199,
+        "ppg_samples_total": 4335,
+        "acc_samples_total": 1581,
+        "ppg_packet_clock": {
+          "nominal_rate_hz": 135,
+          "observed_rate_hz": 135.1196209586975,
+          "inter_packet_missing_samples_estimate": 65,
+          "packet_count": 87
+        },
+        "acc_packet_clock": {
+          "nominal_rate_hz": 52,
+          "observed_rate_hz": 51.78070632021111,
+          "inter_packet_missing_samples_estimate": 34,
+          "packet_count": 18
+        },
+        "quality_approved_windows": 3,
+        "windows": [
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1352,
+              "acc_samples": 519,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0019230769230769162,
+              "ppg_peak_to_peak_counts": 5805.0,
+              "ppg_std_counts": 1637.2435902095347,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 14,
+              "heart_rate_bpm_estimate": 94.73684210526316,
+              "pulse_interval_cv": 0.1377763502932154,
+              "acc_gravity_magnitude_mg": 1016.4221563897552,
+              "motion_dynamic_rms_mg": 13.276830967051444,
+              "motion_dynamic_p95_mg": 26.768111258563575,
+              "ppg_acc_nearest_sample_p95_ms": 18.52371475,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 517,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.005769230769230749,
+              "ppg_peak_to_peak_counts": 1893.0,
+              "ppg_std_counts": 519.8850650848399,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 14,
+              "heart_rate_bpm_estimate": 85.71428571428572,
+              "pulse_interval_cv": 0.08688790188523371,
+              "acc_gravity_magnitude_mg": 1016.094975875779,
+              "motion_dynamic_rms_mg": 7.974045232634295,
+              "motion_dynamic_p95_mg": 13.671513881467371,
+              "ppg_acc_nearest_sample_p95_ms": 18.3762975,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 3609.0,
+              "ppg_std_counts": 1034.1160502197774,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 13,
+              "heart_rate_bpm_estimate": 91.0112359550562,
+              "pulse_interval_cv": 0.22413929431496984,
+              "acc_gravity_magnitude_mg": 1016.1719834466181,
+              "motion_dynamic_rms_mg": 15.189752479014356,
+              "motion_dynamic_p95_mg": 26.191783739700973,
+              "ppg_acc_nearest_sample_p95_ms": 18.3088375,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          }
+        ]
+      },
+      "held_out_historical_impostor_similarity": 0.1251063258877383,
+      "genuine_mean_above_impostor": true,
+      "mean_minus_impostor": 0.7112075229773546,
+      "genuine_windows_above_impostor_max": 1
+    },
+    {
+      "condition": "looser",
+      "similarity_scores": [
+        0.6105648223777833,
+        0.33093044447377984,
+        0.6531398431246422
+      ],
+      "mean_similarity": 0.5315450366587351,
+      "quality_approved_windows": 3,
+      "windows_at_provisional_threshold": 0,
+      "quality": {
+        "overlap_duration_s": 31.600038611,
+        "ppg_samples_total": 4356,
+        "acc_samples_total": 1663,
+        "ppg_packet_clock": {
+          "nominal_rate_hz": 135,
+          "observed_rate_hz": 135.10675990668238,
+          "inter_packet_missing_samples_estimate": 36,
+          "packet_count": 86
+        },
+        "acc_packet_clock": {
+          "nominal_rate_hz": 52,
+          "observed_rate_hz": 51.78281743447131,
+          "inter_packet_missing_samples_estimate": 34,
+          "packet_count": 19
+        },
+        "quality_approved_windows": 3,
+        "windows": [
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1352,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 1028.0,
+              "ppg_std_counts": 236.12264130338454,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 14,
+              "heart_rate_bpm_estimate": 91.52542372881356,
+              "pulse_interval_cv": 0.24546731265043423,
+              "acc_gravity_magnitude_mg": 999.0623102998522,
+              "motion_dynamic_rms_mg": 47.67477493523641,
+              "motion_dynamic_p95_mg": 100.88132271522639,
+              "ppg_acc_nearest_sample_p95_ms": 18.2802172,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 1371.0,
+              "ppg_std_counts": 322.7375571221271,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 13,
+              "heart_rate_bpm_estimate": 81.0,
+              "pulse_interval_cv": 0.1810029066754568,
+              "acc_gravity_magnitude_mg": 1008.347158705762,
+              "motion_dynamic_rms_mg": 39.16761661006979,
+              "motion_dynamic_p95_mg": 83.76968377617733,
+              "ppg_acc_nearest_sample_p95_ms": 18.1971565,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 517,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.005769230769230749,
+              "ppg_peak_to_peak_counts": 816.0,
+              "ppg_std_counts": 189.35344334704328,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 16,
+              "heart_rate_bpm_estimate": 112.5,
+              "pulse_interval_cv": 0.26001313021921585,
+              "acc_gravity_magnitude_mg": 1008.1711164281587,
+              "motion_dynamic_rms_mg": 21.27113349144164,
+              "motion_dynamic_p95_mg": 37.389572155127674,
+              "ppg_acc_nearest_sample_p95_ms": 18.38437,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          }
+        ]
+      },
+      "held_out_historical_impostor_similarity": 0.1251063258877383,
+      "genuine_mean_above_impostor": true,
+      "mean_minus_impostor": 0.4064387107709968,
+      "genuine_windows_above_impostor_max": 0
+    },
+    {
+      "condition": "repositioned",
+      "similarity_scores": [
+        0.6263827944464537,
+        0.62176088791605,
+        0.33363912384068073
+      ],
+      "mean_similarity": 0.5272609354010614,
+      "quality_approved_windows": 3,
+      "windows_at_provisional_threshold": 0,
+      "quality": {
+        "overlap_duration_s": 31.251085116,
+        "ppg_samples_total": 4322,
+        "acc_samples_total": 1647,
+        "ppg_packet_clock": {
+          "nominal_rate_hz": 135,
+          "observed_rate_hz": 135.11319047770667,
+          "inter_packet_missing_samples_estimate": 58,
+          "packet_count": 86
+        },
+        "acc_packet_clock": {
+          "nominal_rate_hz": 52,
+          "observed_rate_hz": 51.77779032048846,
+          "inter_packet_missing_samples_estimate": 29,
+          "packet_count": 18
+        },
+        "quality_approved_windows": 3,
+        "windows": [
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1352,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 1408.0,
+              "ppg_std_counts": 352.2269533635936,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 13,
+              "heart_rate_bpm_estimate": 82.65306122448979,
+              "pulse_interval_cv": 0.06288878707610564,
+              "acc_gravity_magnitude_mg": 1004.3468025531278,
+              "motion_dynamic_rms_mg": 10.625774431897463,
+              "motion_dynamic_p95_mg": 17.933644641253466,
+              "ppg_acc_nearest_sample_p95_ms": 18.2968132,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 518,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.0038461538461538325,
+              "ppg_peak_to_peak_counts": 1288.0,
+              "ppg_std_counts": 361.06539745176843,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 13,
+              "heart_rate_bpm_estimate": 85.26315789473684,
+              "pulse_interval_cv": 0.1531700893503516,
+              "acc_gravity_magnitude_mg": 1005.4250343933052,
+              "motion_dynamic_rms_mg": 9.319028201398204,
+              "motion_dynamic_p95_mg": 15.101253099789481,
+              "ppg_acc_nearest_sample_p95_ms": 18.350494,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          },
+          {
+            "usable": true,
+            "metrics": {
+              "ppg_samples": 1351,
+              "acc_samples": 517,
+              "ppg_missing_fraction_estimate": 0.0,
+              "acc_missing_fraction_estimate": 0.005769230769230749,
+              "ppg_peak_to_peak_counts": 1329.0,
+              "ppg_std_counts": 319.4614069364421,
+              "ppg_clipped_fraction": 0.0,
+              "ppg_longest_extreme_plateau_samples": 1,
+              "pulse_cycles": 12,
+              "heart_rate_bpm_estimate": 81.0,
+              "pulse_interval_cv": 0.09246733243371186,
+              "acc_gravity_magnitude_mg": 1005.2949815850072,
+              "motion_dynamic_rms_mg": 7.9517901478852515,
+              "motion_dynamic_p95_mg": 13.535035551296046,
+              "ppg_acc_nearest_sample_p95_ms": 18.421133,
+              "configured_ppg_rate_hz": 135,
+              "configured_acc_rate_hz": 52
+            },
+            "rejection_reasons": []
+          }
+        ]
+      },
+      "held_out_historical_impostor_similarity": 0.1251063258877383,
+      "genuine_mean_above_impostor": true,
+      "mean_minus_impostor": 0.40215460951332316,
+      "genuine_windows_above_impostor_max": 0
+    }
+  ],
+  "all_genuine_conditions_rank_above_impostor": true,
+  "all_genuine_windows_above_impostor_max": false,
+  "historical_impostor_reference": {
+    "source_session": "historical controlled WEARER_2 capture; PPG-only, no motion quality assessment",
+    "window_scores": [
+      0.9165893603508135,
+      -0.023292224134818615,
+      -0.06380447411542764,
+      -0.05804529361517322,
+      0.2908681241038729,
+      0.03724847895763846,
+      -0.1554235238997334,
+      -0.008992090545085641,
+      0.19080857588755815
+    ],
+    "mean_similarity": 0.1251063258877383,
+    "max_similarity": 0.9165893603508135
+  },
+  "note": "Historical impostor is a separate prior recording, not threshold-fitting data. The mean aggregates its non-overlapping 10-second windows; those adjacent windows are not independent trials. Its PPG-only capture has no accelerometer-based quality assessment. Normal is the enrollment session itself; its score is not an independent genuine test. Placement scores are descriptive.",
+  "run_id": "placement_20261114T224136Z",
+  "privacy_note": "Session identifiers removed. Raw PPG/ACC samples and device address are not included."
+}

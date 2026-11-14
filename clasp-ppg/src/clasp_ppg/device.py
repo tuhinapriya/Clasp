@@ -20,19 +20,31 @@ class SensorStatus:
         self.signal_quality = "NO_DATA"
         self.error: str | None = None
         self.acc_streaming = False
+        self.ppg_streaming = False
+        self.acc_stream_started = False
+        self.ppg_stream_started = False
         self.physiological_signal_present = False
         self.last_acc_sample_at: datetime | None = None
+        self.ppg_packet_count = 0
+        self.ppg_sample_count = 0
+        self.acc_packet_count = 0
+        self.acc_sample_count = 0
+        self.stream_events: list[dict[str, str]] = []
+        self.ppg_packet_clock: list[tuple[int, int]] = []
+        self.acc_packet_clock: list[tuple[int, int]] = []
 
 
 class PolarPPG:
     """Async local sensor API. No network service or Clasp app dependency."""
 
     def __init__(self, device: str | None = None, sampling_rate_hz: int = 135, *,
-                 stream_accelerometer: bool = True, accelerometer_sampling_rate_hz: int = 52) -> None:
+                 stream_ppg: bool = True, stream_accelerometer: bool = True,
+                 accelerometer_sampling_rate_hz: int = 52) -> None:
         if sampling_rate_hz not in (28, 44, 55, 135, 176):
             raise ValueError("unsupported Verity Sense PPG sampling rate")
         self.target = device
         self.sampling_rate_hz = sampling_rate_hz
+        self.stream_ppg = stream_ppg
         if accelerometer_sampling_rate_hz not in (26, 52, 104, 208, 416):
             raise ValueError("unsupported Verity Sense accelerometer rate")
         self.stream_accelerometer = stream_accelerometer
@@ -64,12 +76,17 @@ class PolarPPG:
         self.status.physiological_signal_present = False
         self.status.error = None
         self._recent_ppg.clear()
+        self.status.ppg_packet_count = self.status.ppg_sample_count = 0
+        self.status.acc_packet_count = self.status.acc_sample_count = 0
+        self.status.stream_events.clear()
+        self.status.ppg_packet_clock.clear()
+        self.status.acc_packet_clock.clear()
         self.status.device_address = getattr(device, "address", None)
         self._connector = create_polar_connector(
             device,
-            ppg_callback=self._on_ppg,
+            ppg_callback=self._on_ppg if self.stream_ppg else None,
             acc_callback=self._on_acc if self.stream_accelerometer else None,
-            sdk_mode=self.sampling_rate_hz != 55,
+            sdk_mode=self.stream_ppg and self.sampling_rate_hz != 55,
             ppg_sample_rate=self.sampling_rate_hz,
             acc_sample_rate=self.accelerometer_sampling_rate_hz,
             acc_resolution=16,
@@ -94,36 +111,34 @@ class PolarPPG:
             except Exception:
                 pass
             return self.status
-        self.status.connected = True
+        client = getattr(getattr(self._connector, "polar_device", None), "_client", None)
+        self.status.connected = bool(getattr(client, "is_connected", False))
+        if not self.status.connected:
+            self.disconnect_event.set()
+            self.status.error = "BLE link was not connected after PMD stream startup"
+            return self.status
         self.sampling_rate_hz = int(getattr(self._connector, "_ppg_default_rate", self.sampling_rate_hz))
         self.accelerometer_sampling_rate_hz = 52  # SDK start_streams requests 52 Hz for Verity Sense ACC.
         errors = self._connector.stream_errors
         active = {getattr(stream, "name", str(stream)) for stream in getattr(self._connector, "_active_streams", set())}
-        self.status.acc_streaming = (not self.stream_accelerometer) or ("ACC" in active and "ACC" not in errors)
-        self.status.streaming = "PPG" in active and self.status.acc_streaming and "PPG" not in errors
+        self.status.ppg_stream_started = self.stream_ppg and "PPG" in active and "PPG" not in errors
+        self.status.acc_stream_started = self.stream_accelerometer and "ACC" in active and "ACC" not in errors
+        self.status.ppg_streaming = self.stream_ppg and self.status.ppg_packet_count > 0
+        self.status.acc_streaming = self.stream_accelerometer and self.status.acc_packet_count > 0
+        self.status.streaming = ((not self.stream_ppg or self.status.ppg_streaming)
+                                 and (not self.stream_accelerometer or self.status.acc_streaming)
+                                 and (self.stream_ppg or self.stream_accelerometer))
         if self._connector.stream_errors:
             self.status.error = "; ".join(
                 f"{k}: {v}" for k, v in self._connector.stream_errors.items()
             )
-        # A PMD start acknowledgement alone does not prove that data notifications
-        # are flowing. Require at least one packet from each requested stream.
-        if self.status.streaming:
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + 5.0
-            while loop.time() < deadline:
-                ppg_ready = self.status.last_sample_at is not None
-                acc_ready = not self.stream_accelerometer or self.status.last_acc_sample_at is not None
-                if ppg_ready and acc_ready:
-                    break
-                if self.disconnect_event.is_set():
-                    break
-                await asyncio.sleep(.05)
-            ppg_ready = self.status.last_sample_at is not None
-            acc_ready = not self.stream_accelerometer or self.status.last_acc_sample_at is not None
-            if not ppg_ready or not acc_ready:
-                missing = [name for name, ready in (("PPG", ppg_ready), ("ACC", acc_ready)) if not ready]
-                self.status.streaming = False
-                self.status.error = "BLE connected and PMD start acknowledged, but no data notifications arrived for: " + ", ".join(missing)
+        # PMD start acknowledgements do not prove streaming. The callbacks below
+        # promote status.streaming only after packet data actually arrives.
+        requested_started = (not self.stream_ppg or self.status.ppg_stream_started) and (
+            not self.stream_accelerometer or self.status.acc_stream_started
+        )
+        if requested_started and (self.stream_ppg or self.stream_accelerometer) and not self.status.streaming:
+            self.status.error = "PMD start acknowledged; awaiting data notifications"
         return self.status
 
     async def disconnect(self) -> None:
@@ -132,9 +147,106 @@ class PolarPPG:
         self.status.connected = False
         self.status.streaming = False
         self.status.acc_streaming = False
+        self.status.ppg_streaming = False
+        self.status.acc_stream_started = False
+        self.status.ppg_stream_started = False
         self.status.signal_quality = "NO_DATA"
         self.disconnect_event.set()
         self._invalidate_verification("polar_disconnected")
+
+    async def wait_for_streaming(self, timeout_s: float = 20.0) -> bool:
+        """Wait until callbacks prove that every requested PMD stream delivers data."""
+        if timeout_s <= 0:
+            raise ValueError("timeout_s must be positive")
+        if not self.status.connected:
+            return False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        while loop.time() < deadline:
+            if self.status.streaming:
+                return True
+            if self.disconnect_event.is_set() or not self.status.connected:
+                return False
+            await asyncio.sleep(.05)
+        missing = []
+        if self.stream_ppg and self.status.ppg_packet_count == 0: missing.append("PPG")
+        if self.stream_accelerometer and self.status.acc_packet_count == 0: missing.append("ACC")
+        if missing:
+            self.status.error = "No data notifications arrived for: " + ", ".join(missing)
+        return self.status.streaming
+
+    async def diagnostic_listen(self, duration_s: float = 10.0, *, query_supported_settings: bool = True) -> dict:
+        """Count real SDK notifications/callbacks in memory without saving PPG data."""
+        if not self.status.connected or self._connector is None:
+            raise RuntimeError("BLE link is not connected")
+        if duration_s <= 0:
+            raise ValueError("duration_s must be positive")
+        before = {
+            "ppg_packets": self.status.ppg_packet_count,
+            "ppg_samples": self.status.ppg_sample_count,
+            "acc_packets": self.status.acc_packet_count,
+            "acc_samples": self.status.acc_sample_count,
+            "pmd_raw_notifications": int(getattr(getattr(self._connector, "polar_device", None), "_pmd_counts", {}).get("raw", 0)),
+        }
+        await asyncio.sleep(duration_s)
+        connector = self._connector
+        polar_device = getattr(connector, "polar_device", None)
+        client = getattr(polar_device, "_client", None)
+        pmd_counts = getattr(polar_device, "_pmd_counts", {})
+        after = {
+            "ppg_packets": self.status.ppg_packet_count,
+            "ppg_samples": self.status.ppg_sample_count,
+            "acc_packets": self.status.acc_packet_count,
+            "acc_samples": self.status.acc_sample_count,
+            "pmd_raw_notifications": int(pmd_counts.get("raw", 0)),
+        }
+        def clock_summary(packets, rate):
+            if len(packets) < 2:
+                return {"packet_count": len(packets), "observed_rate_hz": None,
+                        "inter_packet_missing_samples_estimate": None}
+            missing = 0
+            for (previous_ns, _previous_count), (current_ns, current_count) in zip(packets, packets[1:]):
+                expected = round((current_ns - previous_ns) * rate / 1e9)
+                if expected > current_count + max(2, round(current_count * .1)):
+                    missing += expected - current_count
+            elapsed = (packets[-1][0] - packets[0][0]) / 1e9
+            sample_count = sum(count for _, count in packets[1:])
+            return {"packet_count": len(packets), "observed_rate_hz": sample_count / elapsed if elapsed > 0 else None,
+                    "inter_packet_missing_samples_estimate": missing}
+        result = {
+            "duration_s": duration_s,
+            "connected_status": self.status.connected,
+            "ble_client_connected": bool(getattr(client, "is_connected", False)),
+            "requested_streams": [name for name, enabled in (("PPG", self.stream_ppg), ("ACC", self.stream_accelerometer)) if enabled],
+            "sdk_active_streams": sorted(getattr(stream, "name", str(stream)) for stream in getattr(connector, "_active_streams", set())),
+            "callback_counts_before": before,
+            "callback_counts_after": after,
+            "callback_deltas": {key: after[key] - before[key] for key in after},
+            "callback_totals": {"ppg_packets": self.status.ppg_packet_count,
+                "ppg_samples": self.status.ppg_sample_count, "acc_packets": self.status.acc_packet_count,
+                "acc_samples": self.status.acc_sample_count},
+            "ppg_clock": clock_summary(self.status.ppg_packet_clock, self.sampling_rate_hz),
+            "acc_clock": clock_summary(self.status.acc_packet_clock, self.accelerometer_sampling_rate_hz),
+            "callback_errors": dict(getattr(connector, "_callback_errors", {})),
+            "pmd_frame_counts": dict(pmd_counts),
+            "stream_errors": dict(getattr(connector, "stream_errors", {})),
+            "stream_events": list(self.status.stream_events),
+        }
+        # Query the same SDK API used during negotiation to record device-supported settings.
+        try:
+            if not query_supported_settings:
+                return result
+            from polar_ble_sdk._pmd.constants import PmdMeasurementType
+            supported = {}
+            for name, enabled in (("PPG", self.stream_ppg), ("ACC", self.stream_accelerometer)):
+                if not enabled:
+                    continue
+                settings = await polar_device.request_stream_settings(PmdMeasurementType[name])
+                supported[name] = {item.type.name.lower(): list(item.values) for item in settings.settings}
+            result["device_supported_settings"] = supported
+        except Exception as exc:
+            result["settings_query_error"] = f"{type(exc).__name__}: {exc}"
+        return result
 
     async def capture(
         self,
@@ -201,6 +313,11 @@ class PolarPPG:
         self.status.last_sample_at = received
         self.status.signal_quality = "RECEIVING"
         values = [tuple(map(int, row)) for row in samples]
+        self.status.ppg_packet_count += 1
+        self.status.ppg_sample_count += len(values)
+        if values:
+            self.status.ppg_packet_clock.append((int(timestamp_ns), len(values)))
+        self._refresh_streaming_state()
         if values:
             self._recent_ppg.extend(row[2] if len(row) > 2 else row[0] for row in values[-3:])
             self.status.physiological_signal_present = self._physiology_present()
@@ -215,7 +332,28 @@ class PolarPPG:
             if capture is not None:
                 capture.acc_frames.append(ACCFrame(int(timestamp_ns), received,
                     tuple(tuple(map(int, row)) for row in samples)))
+        self.status.acc_packet_count += 1
+        self.status.acc_sample_count += len(samples)
+        if samples:
+            self.status.acc_packet_clock.append((int(timestamp_ns), len(samples)))
+        self._refresh_streaming_state()
         self.status.last_acc_sample_at = received
+
+    def _refresh_streaming_state(self) -> None:
+        if self.disconnect_event.is_set():
+            self.status.streaming = False
+            self.status.ppg_streaming = False
+            self.status.acc_streaming = False
+            return
+        ppg_ready = not self.stream_ppg or self.status.ppg_packet_count > 0
+        acc_ready = not self.stream_accelerometer or self.status.acc_packet_count > 0
+        if ppg_ready and self.stream_ppg:
+            self.status.ppg_streaming = True
+        if acc_ready and self.stream_accelerometer:
+            self.status.acc_streaming = True
+        self.status.streaming = (self.stream_ppg or self.stream_accelerometer) and ppg_ready and acc_ready
+        if self.status.streaming and self.status.error and ("awaiting data notifications" in self.status.error.lower() or "no data notifications arrived" in self.status.error.lower()):
+            self.status.error = None
 
     def _physiology_present(self) -> bool:
         if len(self._recent_ppg) < 6:
@@ -234,9 +372,17 @@ class PolarPPG:
             self._active_verification = None
 
     def _on_log(self, message: str, severity: str) -> None:
+        self.status.stream_events.append({"severity": severity, "message": message})
         if severity == "error":
             self.status.error = message
-        if "disconnect" in message.lower() or "link lost" in message.lower():
+        normalized = message.lower()
+        # The SDK intentionally reconnects before streaming and emits the
+        # informational text "Disconnecting..." during that sequence. Only
+        # treat explicit unexpected-link-loss notifications as disconnects.
+        unexpected_link_loss = severity in {"warning", "error"} and any(
+            phrase in normalized for phrase in ("link lost", "connection lost", "disconnected unexpectedly")
+        )
+        if unexpected_link_loss:
             self.status.connected = False
             self.status.streaming = False
             self.status.signal_quality = "NO_DATA"

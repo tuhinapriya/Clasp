@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 import asyncio
+from contextlib import nullcontext
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -7,7 +9,7 @@ from clasp_ppg.models import ACCFrame, Capture, PPGFrame
 from clasp_ppg.motion_quality import quality_summary, split_synchronized_windows
 from clasp_ppg.storage import load_capture, save_capture
 from clasp_ppg.device import PolarPPG
-from clasp_ppg.verifier import EnrollmentProfile, decide_windows, ActiveVerificationSession, _monitor_active_session
+from clasp_ppg.verifier import EnrollmentProfile, decide_windows, ActiveVerificationSession, _monitor_active_session, PaPaGeiEmbedder
 
 
 def fixture_capture(moving=False):
@@ -75,6 +77,16 @@ def test_polar_disconnect_immediately_invalidates_active_handle():
     assert handle.invalidation_reason == "polar_disconnected"
 
 
+def test_sdk_intentional_reconnect_log_does_not_abort_stream():
+    sensor = PolarPPG()
+    sensor.status.connected = True
+    sensor.status.streaming = True
+    sensor._on_log("Disconnecting...", "info")
+    assert sensor.status.connected
+    assert sensor.status.streaming
+    assert not sensor.disconnect_event.is_set()
+
+
 def test_active_session_watchdog_invalidates_lost_physiology():
     class FakeStatus:
         connected = True
@@ -103,3 +115,35 @@ def test_saved_packet_gap_survives_capture_reload(tmp_path):
     assert len(loaded.frames) == 2
     assert loaded.frames[0].sensor_timestamp_ns == 1_000_000_000
     assert loaded.frames[1].sensor_timestamp_ns == 2_000_000_000
+
+
+def test_combined_stream_status_waits_for_real_callbacks():
+    sensor = PolarPPG(stream_ppg=True, stream_accelerometer=True)
+    sensor.status.error = "PMD start acknowledged; awaiting data notifications"
+    sensor._on_ppg((1_000_000_000, [(0, 0, v, 0) for v in (0, 80, 10, 60)]))
+    assert sensor.status.ppg_packet_count == 1
+    assert sensor.status.ppg_sample_count == 4
+    assert not sensor.status.streaming
+    sensor._on_acc((1_000_000_000, [(0, 0, 1000), (0, 0, 1001)]))
+    assert sensor.status.acc_packet_count == 1
+    assert sensor.status.acc_sample_count == 2
+    assert sensor.status.streaming
+    assert sensor.status.error is None
+
+
+def test_papagei_preprocessing_trims_polyphase_ceil_sample_to_1250():
+    class Output:
+        def __getitem__(self, _index): return self
+        def cpu(self): return self
+        def numpy(self): return np.array([3.0, 4.0])
+    class Model:
+        def __call__(self, tensor):
+            assert tensor.shape == (1, 1, 1250)
+            return Output()
+    embedder = object.__new__(PaPaGeiEmbedder)
+    embedder.model = Model()
+    embedder.torch = SimpleNamespace(from_numpy=lambda value: value, inference_mode=nullcontext)
+    t = np.arange(1351) / 135
+    samples = np.column_stack([np.sin(t), np.cos(t), np.sin(2*np.pi*1.1*t), np.zeros_like(t)])
+    embedding = embedder(samples, 135)
+    np.testing.assert_allclose(embedding, [0.6, 0.8])

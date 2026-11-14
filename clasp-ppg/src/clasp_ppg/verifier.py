@@ -39,9 +39,13 @@ class PaPaGeiEmbedder:
         from fractions import Fraction
         ratio = Fraction(125 / sampling_rate_hz).limit_denominator(1000)
         x = resample_poly(x, ratio.numerator, ratio.denominator)
-        if len(x) != 1250 or not np.isfinite(x).all(): raise ValueError("PaPaGei requires one finite 10-second window")
+        if len(x) < 1250 or not np.isfinite(x).all(): raise ValueError("PaPaGei requires one finite 10-second window")
+        # Resample_poly returns the ceiling length for some rational ratios
+        # (e.g. 1351 raw samples -> 1251). The frozen model uses exactly 1250.
+        x = x[:1250]
         with self.torch.inference_mode():
             vec = self.model(self.torch.from_numpy(x.astype(np.float32)[None, None, :]))[0].cpu().numpy()
+        vec = np.asarray(vec).reshape(-1)
         return vec / max(float(np.linalg.norm(vec)), 1e-12)
 
 
@@ -113,6 +117,8 @@ def decide_windows(entries, profile: EnrollmentProfile, threshold: float = DEFAU
 async def verify_live(sensor, profile: EnrollmentProfile, embedder, *, participant_id="WEARER_1",
                       threshold=DEFAULT_PROVISIONAL_THRESHOLD, data_dir=None):
     """Capture a live 30s verification; early aborts produce UNCERTAIN."""
+    if sensor.status.connected and not sensor.status.streaming:
+        await sensor.wait_for_streaming(20.0)
     if not sensor.status.connected or not sensor.status.streaming:
         return {"decision": "UNCERTAIN", "rejection_reasons": ["polar_not_streaming"], "windows": []}
     sensor.disconnect_event.clear()
