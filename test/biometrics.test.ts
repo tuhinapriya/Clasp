@@ -135,7 +135,7 @@ test('fresh matches do not bypass the payment policy limit', async () => {
   record('polar-ppg');
   await flush();
   assert.equal(auth.snapshot().state, 'AUTHENTICATED');
-  const decision = auth.authorize('create_test_payment', { ...args, amountCents: 501 });
+  const decision = auth.authorize('create_test_payment', { ...args, amountCents: 1001 });
   assert.equal(decision.allowed, false);
   assert.match(decision.reason, /exceeds/);
 });

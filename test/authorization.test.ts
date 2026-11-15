@@ -28,7 +28,8 @@ test('revokes immediately and enforces tool-specific limits', async () => {
   const auth = new AuthorizationService(verified, 120);
   await auth.authenticate();
   assert.equal(auth.authorize('other_tool', args).allowed, false);
-  assert.equal(auth.authorize('create_test_payment', { ...args, amountCents: 501 }).allowed, false);
+  assert.equal(auth.authorize('create_test_payment', { ...args, amountCents: 1000 }).allowed, true);
+  assert.equal(auth.authorize('create_test_payment', { ...args, amountCents: 1001 }).allowed, false);
   auth.revoke();
   assert.equal(auth.authorize('create_test_payment', args).allowed, false);
 });

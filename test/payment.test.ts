@@ -32,6 +32,16 @@ test('authorized action reaches Stripe once and duplicate request is idempotent'
   assert.equal(calls, 1);
 });
 
+test('an authorized ten-dollar test payment reaches the gateway for 1000 cents', async () => {
+  const auth = new AuthorizationService(provider);
+  await auth.authenticate();
+  let amount = 0;
+  const gateway: PaymentGateway = { create: async (input) => { amount = input.amount; return { ...result, amount: input.amount, amount_received: input.amount }; } };
+  const output = await requestScope.run({ requestId: 'allowed-ten-dollar-test' }, () => new ProtectedPaymentTool(auth, () => gateway).execute({ amountUsd: 10, merchantId: 'clasp_demo_merchant' }));
+  assert.equal(output.decision, 'ALLOW');
+  assert.equal(amount, 1000);
+});
+
 
 test('StripeTestGateway refuses live credentials before any API call', async () => {
   const { StripeTestGateway } = await import('../src/payments/test-payment.js');

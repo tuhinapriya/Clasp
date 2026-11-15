@@ -7,7 +7,7 @@ const paymentTool = (payments: ProtectedPaymentTool) => createTool({
   id: 'create_test_payment',
   description: 'Request a small USD payment to the fixed Clasp demonstration merchant. Clasp checks identity and policy immediately before contacting Stripe test mode. Never claim that the request is authorized yourself.',
   inputSchema: z.object({
-    amountUsd: z.number().positive().max(5).describe('Amount in US dollars, e.g. 5 for five dollars'),
+    amountUsd: z.number().positive().describe('Amount in US dollars, e.g. 10 for ten dollars. The gateway enforces the configured payment limit.'),
     merchantId: z.string().describe('Use the configured Clasp demo merchant id exactly.'),
   }),
   execute: async ({ amountUsd, merchantId }) => payments.execute({ amountUsd, merchantId }),

@@ -23,7 +23,7 @@ type Policy = (args: PaymentArgs) => string | null;
 const policies: Record<string, Policy> = {
   create_test_payment: (args) => {
     if (!Number.isInteger(args.amountCents) || args.amountCents < 1) return 'Amount must be a positive integer number of cents.';
-    const max = Number(process.env.MAX_TEST_PAYMENT_CENTS ?? 500);
+    const max = Number(process.env.MAX_TEST_PAYMENT_CENTS ?? 1000);
     if (args.amountCents > max) return `Amount exceeds the $${(max / 100).toFixed(2)} demo limit.`;
     const merchant = process.env.CLASP_DEMO_MERCHANT_ID ?? 'clasp_demo_merchant';
     if (args.merchantId !== merchant) return 'Merchant is not on the Clasp demo allowlist.';
