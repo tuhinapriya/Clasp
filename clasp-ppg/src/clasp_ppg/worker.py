@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import threading
 import time
@@ -22,7 +23,8 @@ def emit(kind, **fields):
 
 
 async def main(args):
-    from .continuous import ContinuousVerifier, PaPaGeiEmbedder
+    from .continuous import ContinuousVerifier, configured_diagnostics
+    from .pulse import PulsePPGEmbedder, live_config
     from .device import PolarPPG
     from .profile_store import load_profile
 
@@ -88,7 +90,7 @@ async def main(args):
             emit('enrollment.failed', reason='Existing profile requires explicit re-enrollment.')
             return
         try:
-            model = await asyncio.to_thread(PaPaGeiEmbedder, args.papagei_source, args.checkpoint)
+            model = await asyncio.to_thread(PulsePPGEmbedder, args.pulse_source, args.checkpoint)
             status = await sensor.connect()
             if not status.connected or not await sensor.wait_for_streaming():
                 raise RuntimeError(status.error or 'Polar streams unavailable.')
@@ -123,13 +125,18 @@ async def main(args):
             if time.monotonic() - started < 90 or capture.stream_errors or stop.is_set():
                 raise RuntimeError('Enrollment capture incomplete.')
             profile, approved = await asyncio.to_thread(enroll_90_seconds, capture, model)
+            diagnostic_saved = False
+            if os.environ.get('CLASP_PPG_DIAGNOSTICS') == '1':
+                from .diagnostics import enrollment_diagnostics_root, save_enrollment_diagnostics
+                await asyncio.to_thread(save_enrollment_diagnostics, capture, profile, enrollment_diagnostics_root())
+                diagnostic_saved = True
             now = datetime.now(timezone.utc)
             if stop.is_set() or sensor.disconnect_event.is_set() or not sensor.status.connected or not sensor.status.streaming or sensor.status.error or any(t is None or (now-t).total_seconds() > 4 for t in (sensor.status.last_sample_at, sensor.status.last_acc_sample_at)):
                 raise RuntimeError('Enrollment interrupted before saving.')
             save_profile(args.profile, profile, replace=args.replace)
             load_profile(args.profile)
             emit('profile', registered=True, identityId='primary-user')
-            emit('enrollment.completed', identityId='primary-user', approvedWindows=approved)
+            emit('enrollment.completed', identityId='primary-user', approvedWindows=approved, diagnosticSaved=diagnostic_saved)
         except Exception as exc:
             emit('enrollment.failed', reason=str(exc) or type(exc).__name__)
         finally:
@@ -142,11 +149,13 @@ async def main(args):
             task = asyncio.create_task(enroll())
         elif registered:
             try:
-                model = await asyncio.to_thread(PaPaGeiEmbedder, args.papagei_source, args.checkpoint)
+                model = await asyncio.to_thread(PulsePPGEmbedder, args.pulse_source, args.checkpoint)
             except Exception as exc:
                 emit('error', reason=f'model_unavailable: {type(exc).__name__}: {exc}')
                 return
-            runtime = ContinuousVerifier(sensor, args.profile, model, lambda result: emit('verification', **result))
+            # No independent calibration exists for Pulse-PPG plus morphology.
+            # Do not reuse a PaPaGei threshold or permit baseline authentication.
+            runtime = ContinuousVerifier(sensor, args.profile, model, lambda result: emit('verification', **result), diagnostic=configured_diagnostics(), config=live_config(), required_model='pulse-ppg')
             task = asyncio.create_task(runtime.run())
         else:
             task = asyncio.create_task(capture_without_profile())
@@ -177,7 +186,7 @@ async def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--profile', required=True)
-    parser.add_argument('--papagei-source', required=True)
+    parser.add_argument('--pulse-source', required=True)
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--device')
     parser.add_argument('--enroll', action='store_true')

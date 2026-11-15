@@ -12,10 +12,13 @@ def enroll_90_seconds(capture, embedder):
         reasons = sorted({reason for r in reports for reason in r.rejection_reasons})
         raise ValueError('Signal quality insufficient: ' + (', '.join(reasons) or 'incomplete synchronized windows'))
     profile = enroll_capture(capture, embedder, count=9)
+    profile.model = getattr(embedder, 'model_id', 'papagei-p')
     if len(profile.embeddings) != 9:
-        raise ValueError('Enrollment needs nine usable PaPaGei embeddings.')
+        raise ValueError('Enrollment needs nine usable neural embeddings.')
     from .morphology import pulse_templates
     morphology, apg = pulse_templates(capture)
+    if morphology is None or apg is None:
+        raise ValueError('Enrollment pulse morphology or APG template is unavailable.')
     profile.morphology_template = morphology.tolist() if morphology is not None else None
     profile.apg_template = apg.tolist() if apg is not None else None
     return profile, len(reports)

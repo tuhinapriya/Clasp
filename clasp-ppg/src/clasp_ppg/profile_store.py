@@ -13,7 +13,7 @@ MODEL = "papagei-p"
 
 def load_profile(path: str | Path) -> EnrollmentProfile:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("schemaVersion") not in (1, 2) or data.get("model") != MODEL or data.get("identityId") != IDENTITY:
+    if data.get("schemaVersion") not in (1, 2, 3) or data.get("model") not in (MODEL, "pulse-ppg") or (data.get("model") == "pulse-ppg" and data.get("schemaVersion") != 3) or data.get("identityId") != IDENTITY:
         raise ValueError("Invalid profile metadata")
     vectors = data.get("embeddings")
     if vectors is None and isinstance(data.get("centroid"), list):
@@ -32,14 +32,14 @@ def load_profile(path: str | Path) -> EnrollmentProfile:
         if vector is not None and (not isinstance(vector, list) or len(vector) != 64 or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in vector) or sum(x*x for x in vector) < 1e-12):
             raise ValueError('Invalid morphology template')
         templates.append(vector)
-    return EnrollmentProfile(vectors, session, *templates)
+    return EnrollmentProfile(vectors, session, *templates, model=data["model"])
 
 
 def save_profile(path: str | Path, profile: EnrollmentProfile, *, replace: bool = False) -> None:
     path = Path(path)
     if path.exists() and not replace:
         raise FileExistsError("Explicit re-enrollment required")
-    payload = {"schemaVersion": 2, "model": MODEL, "identityId": IDENTITY,
+    payload = {"schemaVersion": 3 if profile.model == "pulse-ppg" else 2, "model": profile.model, "identityId": IDENTITY,
                "sourceSessionId": profile.source_session_id, "embeddings": profile.embeddings,
                "centroid": profile.prototype.tolist(), "morphologyTemplate": profile.morphology_template,
                "apgTemplate": profile.apg_template}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from threading import Lock
@@ -11,7 +12,10 @@ import numpy as np
 from .models import ACCFrame, PPGFrame
 from .motion_quality import evaluate_window
 from .profile_store import IDENTITY, load_profile
-from .verifier import DEFAULT_PROVISIONAL_THRESHOLD, PaPaGeiEmbedder, decide_windows
+from .verifier import DEFAULT_PROVISIONAL_THRESHOLD, decide_windows
+from .pulse import PulsePPGEmbedder, live_config
+from .matching import ConsecutiveMatcher, MatchingConfig
+from .morphology import window_templates
 
 WINDOW_NS = 10_000_000_000
 # Polar ACC notifications may be approximately two seconds apart.
@@ -20,13 +24,16 @@ STALE_SECONDS = 4.0
 
 class WindowBuffer:
     """Bounded decoded samples on the common Polar clock, including packet tails."""
-    def __init__(self, ppg_rate=135, acc_rate=52):
+    def __init__(self, ppg_rate=135, acc_rate=52, step_seconds=10):
         self.rates = {PPGFrame: ppg_rate, ACCFrame: acc_rate}
         self.data = {PPGFrame: deque(maxlen=ppg_rate * 100), ACCFrame: deque(maxlen=acc_rate * 100)}
         self.lock = Lock()
         self.next_start = None
         self.last_timestamp = {PPGFrame: None, ACCFrame: None}
         self.invalid = None
+        self.step_ns = int(step_seconds * 1_000_000_000)
+        if not 0 < self.step_ns <= WINDOW_NS:
+            raise ValueError('Invalid window step')
 
     def add(self, frame):
         kind = type(frame)
@@ -62,37 +69,40 @@ class WindowBuffer:
             def take(q):
                 while q and q[0][0] < start:
                     q.popleft()
-                values = []
-                while q and q[0][0] < end:
-                    values.append(q.popleft())
+                values = [(t, v) for t, v in q if start <= t < end]
                 return np.asarray([v for _, v in values]), np.asarray([t for t, _ in values], dtype=np.int64)
             pv, pt = take(p)
             av, at = take(a)
-            self.next_start = end
+            self.next_start = start + self.step_ns
             return pv, pt, av, at
 
 
 class ContinuousVerifier:
     """One BLE connection; emits dictionaries via on_result, including invalidations."""
-    def __init__(self, sensor, profile_path, embedder, on_result, *, stale_seconds=STALE_SECONDS):
+    def __init__(self, sensor, profile_path, embedder, on_result, *, stale_seconds=STALE_SECONDS, config=None, diagnostic=None, required_model=None):
         self.sensor = sensor
         self.profile_path = profile_path
         self.embedder = embedder
         self.on_result = on_result
         self.stale_seconds = stale_seconds
-        self.history = deque(maxlen=9)
+        self.config = config or MatchingConfig.from_env()
+        self.history = deque(maxlen=18 if self.config.mode == 'experimental' else 9)
+        self.matcher = None
+        self.diagnostic = diagnostic
+        self.required_model = required_model
         self.buffer = None
         self.profile = None
         self.last_result = None
         self._stop = asyncio.Event()
         self._invalidated = False
 
-    def emit(self, decision, *, similarity=None, quality=None, reason=None):
+    def emit(self, decision, *, similarity=None, quality=None, reason=None, morphologyDistance=None):
         now = datetime.now(timezone.utc)
         result = {'decision': decision, 'identityId': IDENTITY if decision == 'MATCH' else None, 'similarity': similarity,
-                  'quality': quality, 'verifiedAt': now.isoformat(),
+                  'quality': quality, 'morphologyDistance': morphologyDistance, 'verifiedAt': now.isoformat(),
                   'expiresAt': (now + timedelta(seconds=15)).isoformat(),
-                  'reason': reason, 'threshold': DEFAULT_PROVISIONAL_THRESHOLD,
+                  'reason': reason, 'threshold': DEFAULT_PROVISIONAL_THRESHOLD if self.config.mode == 'baseline' else self.config.threshold,
+                  'scoringMode': self.config.mode,
                   'experimental': True, 'history': list(self.history)}
         self.last_result = result
         self.on_result(result)
@@ -100,6 +110,10 @@ class ContinuousVerifier:
 
     def invalidate(self, reason):
         self.history.clear()
+        if self.matcher:
+            self.matcher.reset()
+        if hasattr(self, '_entries'):
+            self._entries.clear()
         if not self._invalidated:
             self._invalidated = True
             self.emit('UNCERTAIN', reason=reason)
@@ -123,6 +137,25 @@ class ContinuousVerifier:
         if any('insufficient_' in reason or 'sample_loss' in reason for reason in entry['rejection_reasons']):
             self.history.clear()
             self._invalidated = True
+        if self.config.mode == 'experimental':
+            if self.matcher is None:
+                self.matcher = ConsecutiveMatcher(self.profile, self.config)
+            if entry['quality_approved']:
+                morphology, apg = window_templates(ppg, self.sensor.sampling_rate_hz)
+                scored = self.matcher.evaluate(entry['embedding'], morphology, apg)
+            else:
+                self.matcher.reset()
+                scored = {'decision': 'UNCERTAIN', 'similarity': None, 'reason': ', '.join(entry['rejection_reasons']), 'templateSimilarities': []}
+            if not entry['quality_approved'] or scored['decision'] == 'MISMATCH':
+                self.history.clear()
+            self.history.append({'similarity': scored.get('similarity'), 'quality': quality.metrics,
+                                 'quality_approved': quality.usable, 'rejection_reasons': entry['rejection_reasons'],
+                                 'timestamp': datetime.now(timezone.utc).isoformat(),
+                                 'morphologyDistance': scored.get('morphologyDistance'), 'apgDistance': scored.get('apgDistance')})
+            if self.diagnostic:
+                self.diagnostic.record(window, entry, {**scored, 'scoringMode': 'experimental', 'stepSeconds': 5})
+            details = {'similarity': scored.get('similarity'), 'quality': quality.metrics, 'reason': scored.get('reason'), 'morphologyDistance': scored.get('morphologyDistance')}
+            return self.emit(scored['decision'], **details) if emit else (scored['decision'], details)
         prior = getattr(self, '_entries', deque(maxlen=3))
         if self._invalidated:
             prior.clear()
@@ -139,6 +172,21 @@ class ContinuousVerifier:
             decision = 'UNCERTAIN'
         else:
             decision = decide_windows(list(prior), self.profile)['decision']
+        if self.diagnostic:
+            from .morphology import distance
+            similarities = []
+            md = ad = None
+            if entry['embedding'] is not None:
+                vector = np.asarray(entry['embedding'])
+                for template in self.profile.embeddings:
+                    template = np.asarray(template)
+                    norm = np.linalg.norm(template)
+                    similarities.append(float(np.clip(np.dot(vector, template / norm), -1, 1)))
+                morphology, apg = window_templates(ppg, self.sensor.sampling_rate_hz)
+                md = distance(morphology, self.profile.morphology_template)
+                ad = distance(apg, self.profile.apg_template)
+            self.diagnostic.record(window, entry, {**scored, 'decision': decision, 'reason': ', '.join(scored['rejection_reasons']) or None, 'scoringMode': 'baseline', 'stepSeconds': 10,
+                                                   'templateSimilarities': similarities, 'morphologyDistance': md, 'apgDistance': ad})
         details = {'similarity': scored['similarity'], 'quality': scored['quality'],
                    'reason': ', '.join(scored['rejection_reasons']) or None}
         return self.emit(decision, **details) if emit else (decision, details)
@@ -154,12 +202,18 @@ class ContinuousVerifier:
             except (OSError, ValueError, KeyError, TypeError):
                 self.invalidate('missing_or_invalid_profile')
                 return
+            if self.required_model and self.profile.model != self.required_model:
+                self.invalidate('re_enrollment_required_pulse_ppg')
+                return
+            if self.config.mode == 'experimental' and len(self.profile.embeddings) < 9:
+                self.invalidate('re_enrollment_required_nine_templates')
+                return
             self.emit('UNCERTAIN', reason='connecting')
             status = await self.sensor.connect()
             if not status.connected or not await self.sensor.wait_for_streaming():
                 self.invalidate(status.error or 'stream_unavailable')
                 return
-            self.buffer = WindowBuffer(self.sensor.sampling_rate_hz, self.sensor.accelerometer_sampling_rate_hz)
+            self.buffer = WindowBuffer(self.sensor.sampling_rate_hz, self.sensor.accelerometer_sampling_rate_hz, 5 if self.config.mode == 'experimental' else 10)
             unsubscribe = self.sensor.add_frame_listener(self.buffer.add)
             self._invalidated = False
             while not self._stop.is_set():
@@ -211,7 +265,18 @@ class ContinuousVerifier:
 
 
 def create_continuous_verifier(sensor, profile_path, source, checkpoint, on_result):
-    return ContinuousVerifier(sensor, profile_path, PaPaGeiEmbedder(source, checkpoint), on_result)
+    return ContinuousVerifier(sensor, profile_path, PulsePPGEmbedder(source, checkpoint), on_result,
+                              config=live_config(), required_model='pulse-ppg')
+
+
+def configured_diagnostics():
+    if os.environ.get('CLASP_PPG_DIAGNOSTICS') != '1':
+        return None
+    from .diagnostics import DiagnosticRecorder
+    from pathlib import Path
+    default_dir = Path(__file__).resolve().parents[3] / '.clasp' / 'ppg-diagnostics'
+    return DiagnosticRecorder(os.environ.get('CLASP_PPG_DIAGNOSTICS_DIR', str(default_dir)),
+                              os.environ.get('CLASP_PPG_TEST_WEARER'), 'primary-user')
 
 
 def main():
@@ -222,15 +287,16 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--profile', required=True, help='Existing primary-user PPG profile JSON')
-    parser.add_argument('--papagei-source', required=True)
+    parser.add_argument('--pulse-source', required=True)
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--device', default=None)
     args = parser.parse_args()
     def output(result):
         print(json.dumps(result, allow_nan=False), flush=True)
     try:
-        runtime = create_continuous_verifier(PolarPPG(args.device), args.profile,
-                                             args.papagei_source, args.checkpoint, output)
+        runtime = ContinuousVerifier(PolarPPG(args.device), args.profile,
+                                     PulsePPGEmbedder(args.pulse_source, args.checkpoint), output,
+                                     diagnostic=configured_diagnostics(), config=live_config(), required_model='pulse-ppg')
         asyncio.run(runtime.run())
     except KeyboardInterrupt:
         pass

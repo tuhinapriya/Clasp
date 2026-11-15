@@ -55,6 +55,7 @@ class EnrollmentProfile:
     source_session_id: str
     morphology_template: list[float] | None = None
     apg_template: list[float] | None = None
+    model: str = 'papagei-p'
 
     @property
     def prototype(self):

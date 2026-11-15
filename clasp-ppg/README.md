@@ -116,17 +116,38 @@ Run pure processing tests with `python -m pytest` from this directory. These tes
 
 ## Continuous experimental verification
 
-The continuous runtime needs an existing `primary-user` profile saved by `profile_store.save_profile` after explicit enrollment. It does not create a profile. It maintains one Polar connection, buffers PPG and ACC on the sensor clock, and evaluates non-overlapping 10-second windows. It retains nine window results in memory. The most recent three windows must all pass quality checks before the existing two-of-three PaPaGei decision rule can return a decision; the threshold remains 0.80. A rejected latest window, missing samples, stream failure, disconnect, or stale stream makes the result uncertain. The model and threshold are experimental and are not calibrated for secure authorization.
+The live worker uses the official pretrained Pulse-PPG model and the existing pulse morphology method. The same 10-second preprocessing and top-three cosine scoring used by the offline benchmark are used for both enrollment and verification. The old PaPaGei profile is incompatible and requires explicit re-enrollment. Until independent calibration establishes appropriate neural and morphology thresholds, the worker always emits `UNCERTAIN`, even if older threshold environment variables are set. Five overlapping 10-second windows are scored every five seconds; quality, stale-stream and disconnect failures remain fail-closed.
+
+Install the official source and weights locally (outside Git), or set `CLASP_PULSEPPG_SOURCE` and `CLASP_PULSEPPG_CHECKPOINT` to their paths:
 
 ```sh
-python -m clasp_ppg.continuous --profile /path/to/primary-user-ppg.json \
-  --papagei-source /path/to/papagei-foundation-model --checkpoint weights/papagei_p.pt
+git clone https://github.com/maxxu05/pulseppg.git .clasp/pulseppg-source
+curl -fL 'https://zenodo.org/records/17345536/files/pulseppg_model_weights.zip?download=1' -o /tmp/clasp-pulseppg-weights.zip
+unzip /tmp/clasp-pulseppg-weights.zip -d /tmp/clasp-pulseppg-weights
+cp /tmp/clasp-pulseppg-weights/pulseppg/experiments/out/pulseppg/checkpoint_best.pkl .clasp/pulseppg-checkpoint.pkl
 ```
 
-Each line on stdout is a JSON decision with identity, score, quality, timestamps, reason and up to nine recent windows. The result expires after 15 seconds. The current runtime stops on a connection or stream failure; restart it after reconnecting the device. Do not treat a connection or received samples as proof of identity.
+Run the commands from the Clasp project root, after creating `.clasp/`. Install the PPG module dependencies with `pip install -e '.[dev,papagei]'` from `clasp-ppg`, plus `matplotlib`, `scikit-learn`, and `tqdm` for the official model source.
 
-## Clasp worker protocol
+Clasp starts one worker with `POST /api/hardware/polar/start` and stops it with `POST /api/hardware/polar/stop`. The default profile is `.clasp/ppg-profile.json`. Protocol version 1 sends newline-delimited JSON events for readiness, profile, device, verification, enrollment, errors, and shutdown. Diagnostic output goes to stderr. With diagnostics explicitly enabled, window data stays local; it includes Pulse-PPG similarity and morphology distance separately. Raw PPG and templates are sensitive and are not encrypted.
 
-Clasp starts one worker with `POST /api/hardware/polar/start` and stops it with `POST /api/hardware/polar/stop` on its loopback API. The worker owns the sole Polar connection. The default profile is `<Clasp>/.clasp/ppg-profile.json`; it must already be an explicitly enrolled `primary-user` profile. With no profile, the worker can report actual stream availability but cannot produce identity evidence. To configure a separately downloaded PaPaGei source tree, set `CLASP_PAPAGEI_SOURCE` in Clasp's environment; `CLASP_PPG_PYTHON`, `CLASP_PPG_PROFILE`, `CLASP_PAPAGEI_CHECKPOINT`, and `CLASP_PPG_DEVICE` optionally override the other paths or device. Restart Clasp after changing configuration. The Python environment must have the `clasp-ppg` package and model dependencies installed.
+## Experimental matching and local diagnostics
 
-Protocol version 1 uses one JSON object per stdout line: `ready` and `profile` report enrollment; `device` reports connection, actual packet streaming, packet counts, and observation time; `verification` carries decision, identity, similarity, quality, verification time and expiry; `error` reports failures; `stopped` ends the session. A single stdin line `{"type":"shutdown","version":1}` requests shutdown. Diagnostic output goes to stderr. Clasp invalidates evidence on stream failure, invalid messages, missing profile, heartbeat timeout, worker exit, and expiry. This experimental matcher is not calibrated for secure authentication.
+Enrollment persists nine independent Pulse-PPG embeddings, their normalized centroid, and pulse morphology and APG templates in profile schema 3. The same `PulsePPGEmbedder` preprocessing is used by enrollment and live verification. Existing PaPaGei profiles remain readable for offline research but require explicit re-enrollment for live Pulse-PPG verification. Profile data remains local and is sensitive.
+
+The live worker uses 10-second windows every 5 seconds and averages the three closest Pulse-PPG templates. It has no independently calibrated neural or morphology threshold and always returns UNCERTAIN. Legacy PaPaGei baseline code remains for offline research only; live environment variables cannot enable it.
+
+Morphology and APG distances are measured when templates exist. Their live acceptance gates and EWMA are disabled; environment variables do not enable uncalibrated authentication. The existing morphology results overlap across wearers and do not justify a threshold. A raw below-threshold score, rejected window, stream failure, stale data, or detected loss resets confirmations and smoothing. Sensor removal or handoff can only be detected through the existing stream and signal-quality checks: a clean handoff can evade them and there is no validated immediate removal detector.
+
+For explicit, local-only diagnostics, set `CLASP_PPG_DIAGNOSTICS=1` and `CLASP_PPG_TEST_WEARER=person_a` (or another safe label) before starting live verification, and optionally set `CLASP_PPG_DIAGNOSTICS_DIR` to a private local directory. Each window stores raw PPG/ACC and sensor timestamps in an NPZ file, plus a JSON file with the enrollment identity, wearer label, quality, embedding scores, template similarities, morphology/APG distances and decision; embeddings are in the NPZ. Files are local, unencrypted, and created with restricted permissions. Never commit or upload them. Restart the worker after changing settings.
+
+Replay diagnostic windows locally against both rules using the same saved audio-free PPG windows:
+
+```sh
+cd clasp-ppg
+.venv/bin/python -m clasp_ppg.replay --profile ../.clasp/ppg-profile.json ../.clasp/ppg-diagnostics/ppg-RECORDING_ID
+```
+
+The replay emits one JSON line per recording with per-window experimental and baseline decisions. It uses alternate 5-second-hop windows for the old 10-second non-overlapping baseline. Set the same experimental environment variables when replaying as during capture. Windows from the same session, especially overlapping windows, are not independent trials; comparisons require separate, correctly labeled sessions. With no experimental threshold, results remain UNCERTAIN and cannot yield a false-accept rate.
+
+When `CLASP_PPG_DIAGNOSTICS=1`, an explicitly initiated PPG enrollment also saves its nine accepted synchronized raw PPG/accelerometer windows and reconstructed Polar-clock timestamps under `.clasp/ppg-diagnostics/enrollment-<id>/`. The directory and files are private to the local user. Metadata labels the enrolled person `person_a` and identity `primary-user`, records signal quality and sample rates, and includes the source session and an embedding fingerprint to link the recording with the enrolled profile. Nothing is uploaded. Without diagnostics enabled, enrollment raw data is not saved. Failed or rejected captures do not produce an accepted recording.

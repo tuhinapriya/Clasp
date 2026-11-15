@@ -24,7 +24,7 @@ export class PolarWorkerVerifier implements PolarPpgIdentityVerifier {
     this.handlers = handlers;
     this.stopping = false;
     handlers.onStatus('unavailable', 'Polar worker starting.');
-    const args = ['-u', '-m', 'clasp_ppg.worker', '--profile', this.options.profile, '--papagei-source', this.options.source, '--checkpoint', this.options.checkpoint];
+    const args = ['-u', '-m', 'clasp_ppg.worker', '--profile', this.options.profile, '--pulse-source', this.options.source, '--checkpoint', this.options.checkpoint];
     if (this.options.device) args.push('--device', this.options.device);
     if (this.options.enroll) args.push('--enroll');
     if (this.options.replace) args.push('--replace');
@@ -89,7 +89,7 @@ export class PolarWorkerVerifier implements PolarPpgIdentityVerifier {
         this.fail('Verification received without a fresh Polar stream.');
       } else {
         if (decision === 'MATCH' && (m.similarity === null || !m.quality)) throw new Error('Incomplete MATCH');
-        const result: FactorVerification = { factor: 'polar-ppg', decision: decision as FactorVerification['decision'], subjectId: decision === 'MATCH' ? 'primary-user' : null, identityId: decision === 'MATCH' ? 'primary-user' : null, verifiedAt: m.verifiedAt, expiresAt: m.expiresAt, verifier: 'papagei-p-experimental', simulated: false, similarity: m.similarity as number | null };
+        const result: FactorVerification = { factor: 'polar-ppg', decision: decision as FactorVerification['decision'], subjectId: decision === 'MATCH' ? 'primary-user' : null, identityId: decision === 'MATCH' ? 'primary-user' : null, verifiedAt: m.verifiedAt, expiresAt: m.expiresAt, verifier: 'pulse-ppg-experimental', simulated: false, similarity: m.similarity as number | null };
         this.handlers?.onResult(result);
       }
     } else if (m.type === 'enrollment.progress') {

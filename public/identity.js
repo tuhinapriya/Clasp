@@ -35,13 +35,13 @@ function render(data) {
   if (latestVoiceTest) $('voice-test-result').textContent = `Test ${latestVoiceTest.decision} · similarity ${score(latestVoiceTest.similarity)} · ${latestVoiceTest.reason ?? 'Completed.'}`;
   const pv = data.polarVerifier;
   $('polar-device').textContent = pv.device?.connected ? (pv.device.streaming ? 'Connected · streaming' : 'Connected · waiting for streams') : (pv.running ? 'Connecting / unavailable' : 'Not connected');
-  $('polar-profile').textContent = pv.profile?.registered ? 'Registered · primary-user' : pv.profile?.existing ? 'Invalid profile · re-register' : 'Not registered';
+  $('polar-profile').textContent = pv.profile?.reEnrollmentRequired ? 'Re-registration required for Pulse-PPG' : pv.profile?.registered ? 'Registered · primary-user' : pv.profile?.existing ? 'Invalid profile · re-register' : 'Not registered';
   $('polar-result').textContent = data.biometrics.polarPpg.status;
   const last = pv.latestVerification;
   $('polar-freshness').textContent = `${score(last?.similarity)} · ${fresh(data.biometrics.polarPpg.expiresAt)}${last?.verifiedAt ? ` · checked ${time(last.verifiedAt)}` : ''}`;
   if (last?.quality) {
     const q = last.quality;
-    $('polar-quality').textContent = `${last.reason || 'Quality passed'} · motion RMS ${typeof q.motion_dynamic_rms_mg === 'number' ? q.motion_dynamic_rms_mg.toFixed(1) + ' mg' : '—'}`;
+    $('polar-quality').textContent = `Morphology distance ${score(last.morphologyDistance)} · motion RMS ${typeof q.motion_dynamic_rms_mg === 'number' ? q.motion_dynamic_rms_mg.toFixed(1) + ' mg' : '—'} · ${last.reason || 'Quality passed'}`;
   } else $('polar-quality').textContent = 'No window yet';
   $('polar-register').hidden = !!pv.profile?.existing;
   $('polar-reregister').hidden = !pv.profile?.existing;

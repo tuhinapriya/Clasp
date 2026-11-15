@@ -20,13 +20,20 @@ def _samples_with_times(capture: Capture, acc: bool = False):
     frames = capture.acc_frames if acc else capture.frames
     rate = capture.accelerometer_sampling_rate_hz if acc else capture.sampling_rate_hz
     rows, times = [], []
+    previous = None
     for frame in frames:
         values = frame.samples
         if not values:
             continue
         start = frame.sensor_timestamp_ns - round((len(values) - 1) * 1e9 / rate)
-        rows.extend(values)
-        times.extend(start + round(i * 1e9 / rate) for i in range(len(values)))
+        if previous is not None and frame.sensor_timestamp_ns <= previous:
+            raise ValueError('Non-monotonic Polar packet timestamps')
+        for i, value in enumerate(values):
+            stamp = start + round(i * 1e9 / rate)
+            if previous is None or stamp > previous:
+                rows.append(value)
+                times.append(stamp)
+        previous = frame.sensor_timestamp_ns
     return np.asarray(rows, dtype=float), np.asarray(times, dtype=np.int64)
 
 

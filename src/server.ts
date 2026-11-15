@@ -48,9 +48,9 @@ function polarProfileStatus() {
   try {
     const p = JSON.parse(readFileSync(polarProfilePath, 'utf8'));
     const vectors = Array.isArray(p.embeddings) ? p.embeddings : (Array.isArray(p.centroid) ? [p.centroid] : []);
-    const valid = [1, 2].includes(p.schemaVersion) && p.model === 'papagei-p' && p.identityId === 'primary-user' && typeof p.sourceSessionId === 'string' && vectors.length >= 1 && vectors.every((v: unknown) => Array.isArray(v) && v.length === 512 && v.every((n: unknown) => typeof n === 'number' && Number.isFinite(n)) && v.some((n: number) => n !== 0));
-    return { registered: valid, existing: true, identityId: valid ? 'primary-user' : null };
-  } catch { return { registered: false, existing: existsSync(polarProfilePath), identityId: null }; }
+    const valid = (([1, 2].includes(p.schemaVersion) && p.model === 'papagei-p') || (p.schemaVersion === 3 && p.model === 'pulse-ppg')) && p.identityId === 'primary-user' && typeof p.sourceSessionId === 'string' && vectors.length >= 1 && vectors.every((v: unknown) => Array.isArray(v) && v.length === 512 && v.every((n: unknown) => typeof n === 'number' && Number.isFinite(n)) && v.some((n: number) => n !== 0));
+    return { registered: valid, existing: true, identityId: valid ? 'primary-user' : null, reEnrollmentRequired: valid && (p.model !== 'pulse-ppg' || vectors.length < 9), templateCount: vectors.length };
+  } catch { return { registered: false, existing: existsSync(polarProfilePath), identityId: null, reEnrollmentRequired: false, templateCount: 0 }; }
 }
 
 function voiceProfileMetadata() {
@@ -147,8 +147,8 @@ async function startPolarWorker(req: express.Request, res: express.Response, enr
   const worker = new PolarWorkerVerifier({
     python: process.env.CLASP_PPG_PYTHON ?? path.join(moduleDir, '.venv/bin/python'),
     moduleDir, profile: polarProfilePath, enroll, replace,
-    source: process.env.CLASP_PAPAGEI_SOURCE ?? path.join(projectRoot, '.clasp/papagei-foundation-model'),
-    checkpoint: process.env.CLASP_PAPAGEI_CHECKPOINT ?? path.join(moduleDir, 'weights/papagei_p.pt'),
+    source: process.env.CLASP_PULSEPPG_SOURCE ?? path.join(projectRoot, '.clasp/pulseppg-source'),
+    checkpoint: process.env.CLASP_PULSEPPG_CHECKPOINT ?? path.join(projectRoot, '.clasp/pulseppg-checkpoint.pkl'),
     onEvent: (event) => {
       if (event.type === 'profile' || event.type === 'ready') polarProfileRegistered = event.registered === true;
       if (event.type === 'verification') polarLastVerification = event;

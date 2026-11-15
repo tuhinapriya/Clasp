@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from clasp_ppg.continuous import ContinuousVerifier, WindowBuffer
+from clasp_ppg.matching import MatchingConfig
 from clasp_ppg.models import PPGFrame, ACCFrame
 from clasp_ppg.verifier import EnrollmentProfile
 from test_motion_verifier import fixture_capture
@@ -29,7 +30,7 @@ def test_three_windows_refresh_and_fail_closed_on_motion():
     sensor = SimpleNamespace(sampling_rate_hz=135, accelerometer_sampling_rate_hz=52)
     events = []
     vector = np.array([1., 0.])
-    verifier = ContinuousVerifier(sensor, 'unused', lambda *_: vector, events.append)
+    verifier = ContinuousVerifier(sensor, 'unused', lambda *_: vector, events.append, config=MatchingConfig(mode='baseline'))
     verifier.profile = EnrollmentProfile([[1., 0.], [1., 0.]], 'fixture')
     assert [verifier.process_window(window)['decision'] for _ in range(3)] == ['UNCERTAIN', 'UNCERTAIN', 'MATCH']
     vector[:] = [-1., 0.]
@@ -55,7 +56,7 @@ def test_missing_profile_emits_uncertain_and_never_connects(tmp_path):
 
 def test_stale_stream_invalidates_and_disconnects(tmp_path, monkeypatch):
     from clasp_ppg import continuous
-    monkeypatch.setattr(continuous, 'load_profile', lambda _: EnrollmentProfile([[1., 0.], [1., 0.]], 'x'))
+    monkeypatch.setattr(continuous, 'load_profile', lambda _: EnrollmentProfile([[1., 0.]] * 9, 'x'))
     class Sensor:
         sampling_rate_hz = 135
         accelerometer_sampling_rate_hz = 52
@@ -87,7 +88,7 @@ def test_disconnect_invalidates_existing_result():
 def test_missing_samples_clear_previous_match():
     from clasp_ppg.motion_quality import split_synchronized_windows
     sensor = SimpleNamespace(sampling_rate_hz=135, accelerometer_sampling_rate_hz=52)
-    verifier = ContinuousVerifier(sensor, 'unused', lambda *_: np.array([1., 0.]), lambda _: None)
+    verifier = ContinuousVerifier(sensor, 'unused', lambda *_: np.array([1., 0.]), lambda _: None, config=MatchingConfig(mode='baseline'))
     verifier.profile = EnrollmentProfile([[1., 0.], [1., 0.]], 'fixture')
     window = split_synchronized_windows(fixture_capture())[0]
     for _ in range(3): verifier.process_window(window)
