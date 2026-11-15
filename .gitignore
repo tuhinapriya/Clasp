@@ -4,10 +4,14 @@
 .clasp/
 node_modules/
 .venv/
+.venv-papagei/
 dist/
 *.log
 .DS_Store
 vexo-open-kit/
-
+clasp-ppg/data/
+clasp-ppg/weights/
 __pycache__/
+.pytest_cache/
 *.py[cod]
+*.egg-info/
