@@ -19,6 +19,9 @@ def test_experimental_fit_is_bound_to_exact_profile(tmp_path):
     (tmp_path / 'ppg-demo-thresholds.json').write_text(json.dumps(fit))
     config = live_config(profile)
     assert config.threshold == 0.81 and config.morphology_threshold == 0.015
+    fit['morphology_max'] = None
+    (tmp_path / 'ppg-demo-thresholds.json').write_text(json.dumps(fit))
+    assert live_config(profile).threshold == 0.81 and live_config(profile).morphology_threshold is None
     profile.write_text('replacement profile')
     assert live_config(profile).threshold is None
 from clasp_ppg.verifier import EnrollmentProfile

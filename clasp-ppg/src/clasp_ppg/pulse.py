@@ -18,7 +18,8 @@ def live_config(profile_path=None):
         fit = json.loads(profile_path.with_name('ppg-demo-thresholds.json').read_text())
         if fit['profile_sha256'] != hashlib.sha256(profile_path.read_bytes()).hexdigest() or fit['purpose'] != 'experimental-demo':
             raise ValueError('Fit does not match current enrollment')
-        return MatchingConfig(mode='experimental', threshold=float(fit['similarity_min']), morphology_threshold=float(fit['morphology_max']), morphology_polarity_invariant=fit.get('morphology_polarity_invariant') is True)
+        morphology_max = fit.get('morphology_max')
+        return MatchingConfig(mode='experimental', threshold=float(fit['similarity_min']), morphology_threshold=float(morphology_max) if morphology_max is not None else None, morphology_polarity_invariant=fit.get('morphology_polarity_invariant') is True)
     except (OSError, KeyError, ValueError, TypeError):
         return MatchingConfig(mode='experimental', threshold=None)
 
