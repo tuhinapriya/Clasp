@@ -234,6 +234,15 @@ def main():
                         emit("microphone", active=False)
 
         def process_voice_jobs():
+            # MLX model streams are thread-bound: load and use the model on this
+            # worker, away from the BLE heartbeat and capture thread.
+            try:
+                import mlx.core as mx
+                from mlx_whisper.transcribe import ModelHolder
+                from speaker_verifier import ASR_MODEL_ID
+                ModelHolder.get_model(ASR_MODEL_ID, mx.float16)
+            except Exception as error:
+                emit("voice.error", reason=f"Local transcription model unavailable: {error}")
             while True:
                 job = voice_jobs.get()
                 if job is None:
@@ -305,7 +314,7 @@ def main():
                     break
             emit("heartbeat", bandNumber=band.number, name=band.name)
             band.wait(0.2)
-            if capture is not None and capture["packets"] >= capture["targetPackets"]:
+            if capture is not None and (capture["packets"] >= capture["targetPackets"] or time.time() - capture["startedAt"] >= capture["targetPackets"] / 50 + 8):
                 finish_capture()
             if deferred_capture is not None and model_ready.is_set():
                 command, deferred_capture = deferred_capture, None

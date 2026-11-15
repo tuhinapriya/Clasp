@@ -18,6 +18,7 @@ class MatchingConfig:
     top_k: int = 3
     confirmations: int = 5
     morphology_threshold: float | None = None
+    morphology_polarity_invariant: bool = False
     apg_threshold: float | None = None
     ewma_alpha: float | None = None
 
@@ -68,6 +69,8 @@ class ConsecutiveMatcher:
             raise ValueError('top_k exceeds enrollment templates')
         similarity = float(np.mean(np.sort(similarities)[-c.top_k:]))
         md = distance(morphology, self.profile.morphology_template)
+        if md is not None and c.morphology_polarity_invariant:
+            md = min(md, 2.0 - md)
         ad = distance(apg, self.profile.apg_template)
         output = {'similarity': similarity, 'templateSimilarities': similarities.tolist(), 'morphologyDistance': md, 'apgDistance': ad}
         if c.threshold is None:

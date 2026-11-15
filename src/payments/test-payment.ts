@@ -4,7 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { publish } from '../events.js';
 import { AuthorizationService } from '../auth/authorization.js';
 
-export const requestScope = new AsyncLocalStorage<{ requestId: string }>();
+export const requestScope = new AsyncLocalStorage<{ requestId: string; demo?: boolean; isStillValid?: () => boolean; getEvidence?: () => unknown }>();
 export interface PaymentGateway {
   create(input: { amount: number; currency: string; description: string; metadata: Record<string, string> }, idempotencyKey: string): Promise<{ id: string; status: string; livemode: boolean; amount: number; currency: string; amount_received: number }>;
 }
@@ -52,7 +52,7 @@ export class ProtectedPaymentTool {
 
   private deny(requestId: string, requestedAction: Record<string, unknown>, identityState: string, reason: string) {
     const outcome: PaymentOutcome = { ok: false, decision: 'DENY', reason, stripeCalled: false };
-    publish('audit.entry', { requestId, requestedAction, identityState, decision: 'DENY', reason, executionOutcome: 'blocked', externalApiInvoked: false });
+    publish('audit.entry', { requestId, requestedAction, identityState, decision: 'DENY', reason, executionOutcome: 'blocked', externalApiInvoked: false, source: 'biometric' });
     publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
     return outcome;
   }
@@ -62,11 +62,19 @@ export class ProtectedPaymentTool {
     publish('agent.tool.requested', { requestId, tool: 'create_test_payment', requestedAction: { amountUsd: input.amountUsd, merchantId: input.merchantId, currency: args.currency } });
 
     const requestedAction = { tool: 'create_test_payment', amountUsd: input.amountUsd, merchantId: input.merchantId };
-    const preflight = this.auth.authorize('create_test_payment', args, 'preflight');
+    const scope = requestScope.getStore();
+    if (scope?.demo) {
+      publish('demo.boundary', { requestId, simulated: false, biometrics: scope.getEvidence?.() });
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    if (scope?.isStillValid && !scope.isStillValid()) return this.deny(requestId, requestedAction, 'LOCKED', 'Vexo disconnected before authorization.');
+    const authorize = (phase: 'preflight' | 'execution') => this.auth.authorize('create_test_payment', args, phase, requestId);
+    const preflight = authorize('preflight');
     if (!preflight.allowed) return this.deny(requestId, requestedAction, preflight.identityState, preflight.reason);
 
     // Re-check policy and current biometric evidence immediately before the external side effect.
-    const decision = this.auth.authorize('create_test_payment', args, 'execution');
+    if (scope?.isStillValid && !scope.isStillValid()) return this.deny(requestId, requestedAction, 'LOCKED', 'Vexo disconnected before execution.');
+    const decision = authorize('execution');
     if (!decision.allowed) return this.deny(requestId, requestedAction, decision.identityState, decision.reason);
 
     let gateway: PaymentGateway;
@@ -86,7 +94,7 @@ export class ProtectedPaymentTool {
       }, `clasp-${requestId}`);
       if (result.livemode) throw new Error('Stripe returned a live-mode PaymentIntent; refusing to report it as a demo payment.');
       const outcome: PaymentOutcome = { ok: result.status === 'succeeded', decision: 'ALLOW', reason: result.status === 'succeeded' ? decision.reason : `Stripe test payment status: ${result.status}.`, stripeCalled: true, paymentIntent: { id: result.id, status: result.status, livemode: false, amount: result.amount, currency: result.currency, amountReceived: result.amount_received } };
-      publish('audit.entry', { requestId, requestedAction, identityState: decision.identityState, decision: 'ALLOW', reason: decision.reason, executionOutcome: result.status, externalApiInvoked: true, paymentIntentId: result.id });
+      publish('audit.entry', { requestId, requestedAction, identityState: decision.identityState, decision: 'ALLOW', reason: decision.reason, executionOutcome: result.status, externalApiInvoked: true, paymentIntentId: result.id, source: 'biometric' });
       publish('tool.execution.completed', { requestId, tool: 'create_test_payment', ...outcome });
       return outcome;
     } catch (error) {

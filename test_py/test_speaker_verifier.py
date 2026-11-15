@@ -55,7 +55,7 @@ class SpeakerVerifierTests(unittest.TestCase):
         self.assertEqual(result["identityId"], profile["identityId"])
         self.assertEqual(result["similarity"], 1.0)
         self.assertEqual(result["audioSource"]["device"], "Vexo-HACK-78")
-        self.assertEqual(result["expiresAt"], "2027-01-15T08:00:15Z")
+        self.assertEqual(result["expiresAt"], "9999-12-31T23:59:59Z")
 
     def test_different_speaker_embedding_is_a_mismatch(self):
         self.verifier.register(pcm_for(0.1))

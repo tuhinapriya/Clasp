@@ -79,17 +79,20 @@ export class AuthorizationService {
     return this.snapshot();
   }
 
-  authorize(toolName: string, args: PaymentArgs, phase: 'preflight' | 'execution' = 'execution'): AuthDecision {
+  authorize(toolName: string, args: PaymentArgs, phase: 'preflight' | 'execution' = 'execution', requestId?: string): AuthDecision {
     this.expireIfNeeded();
     this.enforceCurrentIdentity();
     const checkedAt = new Date(this.now()).toISOString();
     const identityState = this.state;
     let reason = '';
     if (!(toolName in policies)) reason = 'No authorization policy exists for this tool.';
-    else if (identityState !== 'AUTHENTICATED' || !this.sessionId) reason = identityState === 'EXPIRED' ? 'Authentication session expired.' : 'No active authenticated identity session.';
+    else if (identityState !== 'AUTHENTICATED' || !this.sessionId) {
+      const guard = this.sessionGuard?.();
+      reason = guard && !guard.valid ? guard.reason : identityState === 'EXPIRED' ? 'Authentication session expired.' : 'No active authenticated identity session.';
+    }
     else reason = policies[toolName]!(args) ?? '';
     const decision: AuthDecision = { allowed: !reason, reason: reason || 'Authenticated session and tool policy passed.', identityState, sessionId: this.sessionId, checkedAt };
-    publish('authorization.decision', { phase, tool: toolName, requestedAction: { amountCents: args.amountCents, merchantId: args.merchantId, currency: args.currency }, ...decision, simulated: this.simulated });
+    publish('authorization.decision', { requestId, phase, tool: toolName, requestedAction: { amountCents: args.amountCents, merchantId: args.merchantId, currency: args.currency }, ...decision, simulated: this.simulated });
     return decision;
   }
 

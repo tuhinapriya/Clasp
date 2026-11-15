@@ -7,6 +7,20 @@ from clasp_ppg.continuous import ContinuousVerifier
 from clasp_ppg.matching import MatchingConfig, ConsecutiveMatcher
 from clasp_ppg.profile_store import save_profile, load_profile
 from clasp_ppg.pulse import PulsePPGEmbedder, live_config
+
+
+def test_experimental_fit_is_bound_to_exact_profile(tmp_path):
+    import hashlib
+    import json
+    profile = tmp_path / 'ppg-profile.json'
+    profile.write_text('original profile')
+    fit = {'purpose': 'experimental-demo', 'profile_sha256': hashlib.sha256(profile.read_bytes()).hexdigest(),
+           'similarity_min': 0.81, 'morphology_max': 0.015}
+    (tmp_path / 'ppg-demo-thresholds.json').write_text(json.dumps(fit))
+    config = live_config(profile)
+    assert config.threshold == 0.81 and config.morphology_threshold == 0.015
+    profile.write_text('replacement profile')
+    assert live_config(profile).threshold is None
 from clasp_ppg.verifier import EnrollmentProfile
 
 
@@ -53,6 +67,14 @@ def test_no_calibration_keeps_neural_and_morphology_match_uncertain():
         assert result['decision'] == 'UNCERTAIN'
         assert result['similarity'] == 1.0
         assert result['morphologyDistance'] == 0.0
+
+
+def test_optional_experimental_polarity_tolerant_morphology():
+    profile = EnrollmentProfile([[1., 0.]] * 9, 'pulse', [1., 0.], [1., 0.], model='pulse-ppg')
+    config = MatchingConfig(threshold=0.9, morphology_threshold=0.1, morphology_polarity_invariant=True, confirmations=1)
+    result = ConsecutiveMatcher(profile, config).evaluate([1., 0.], [-1., 0.], [1., 0.])
+    assert result['decision'] == 'MATCH'
+    assert result['morphologyDistance'] == pytest.approx(0)
 
 
 def test_live_configuration_does_not_reuse_legacy_thresholds(monkeypatch):

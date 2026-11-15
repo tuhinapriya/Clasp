@@ -153,9 +153,8 @@ async def main(args):
             except Exception as exc:
                 emit('error', reason=f'model_unavailable: {type(exc).__name__}: {exc}')
                 return
-            # No independent calibration exists for Pulse-PPG plus morphology.
-            # Do not reuse a PaPaGei threshold or permit baseline authentication.
-            runtime = ContinuousVerifier(sensor, args.profile, model, lambda result: emit('verification', **result), diagnostic=configured_diagnostics(), config=live_config(), required_model='pulse-ppg')
+            # The optional demo fit is experimental and bound to this exact profile.
+            runtime = ContinuousVerifier(sensor, args.profile, model, lambda result: emit('verification', **result), diagnostic=configured_diagnostics(), config=live_config(args.profile), required_model='pulse-ppg')
             task = asyncio.create_task(runtime.run())
         else:
             task = asyncio.create_task(capture_without_profile())

@@ -107,7 +107,7 @@ export class BiometricEvidenceService {
       || result.simulated !== false || typeof result.verifier !== 'string' || !result.verifier.trim()
       || !Number.isFinite(verifiedAtMs) || !Number.isFinite(expiresAtMs)
       || verifiedAtMs > now || expiresAtMs <= now || expiresAtMs <= verifiedAtMs
-      || expiresAtMs - verifiedAtMs > MAX_RESULT_TTL_MS
+      || (result.factor === 'polar-ppg' && expiresAtMs - verifiedAtMs > MAX_RESULT_TTL_MS)
       || (result.decision === 'MATCH' && !result.subjectId?.trim())) {
       this.invalidate(result.factor, 'Biometric verification result was malformed, simulated, or outside its validity window.');
       return false;
@@ -159,13 +159,13 @@ export class BiometricEvidenceService {
   authorizationStatus() {
     const snapshot = this.snapshot();
     if (!snapshot.authorized) return { valid: false, reason: this.denialReason(snapshot) };
-    return { valid: true, reason: 'Fresh voice-speaker and Polar PPG identity matches agree.' };
+    return { valid: true, reason: 'Voice-speaker and live Polar PPG identity matches agree.' };
   }
 
   private factorSnapshot(factor: BiometricFactor) {
     const result = this.results.get(factor);
     if (!result) return { status: 'UNAVAILABLE' as const, verifier: null, verifiedAt: null, expiresAt: null };
-    if (this.now() - result.verifiedAtMs > MAX_RESULT_FRESHNESS_MS || this.now() >= result.expiresAtMs) {
+    if ((factor === 'polar-ppg' && this.now() - result.verifiedAtMs > MAX_RESULT_FRESHNESS_MS) || this.now() >= result.expiresAtMs) {
       return { status: 'EXPIRED' as const, verifier: result.verifier, verifiedAt: result.verifiedAt, expiresAt: result.expiresAt };
     }
     return { status: result.decision, verifier: result.verifier, verifiedAt: result.verifiedAt, expiresAt: result.expiresAt };

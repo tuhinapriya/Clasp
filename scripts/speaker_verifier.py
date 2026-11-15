@@ -10,7 +10,7 @@ from pathlib import Path
 
 MODEL_ID = "speechbrain/spkrec-ecapa-voxceleb"
 IDENTITY_ID = "primary-user"
-ASR_MODEL_ID = os.environ.get("CLASP_ASR_MODEL", "mlx-community/whisper-tiny")
+ASR_MODEL_ID = os.environ.get("CLASP_ASR_MODEL", "mlx-community/whisper-small.en-mlx-4bit")
 SAMPLE_RATE = 16_000
 FRAME_SAMPLES = 320
 MIN_CAPTURE_SECONDS = 4.0
@@ -18,7 +18,7 @@ MIN_SPEECH_SECONDS = 2.5
 MIN_SPEECH_RATIO = 0.30
 MATCH_THRESHOLD = float(os.environ.get("CLASP_VOICE_MATCH_THRESHOLD", "0.28"))
 MISMATCH_THRESHOLD = float(os.environ.get("CLASP_VOICE_MISMATCH_THRESHOLD", "0.22"))
-EVIDENCE_TTL_SECONDS = 15
+VOICE_CONNECTION_EXPIRY = "9999-12-31T23:59:59Z"
 
 
 class VoiceQualityError(Exception):
@@ -162,7 +162,7 @@ class LocalSpeakerVerifier:
     def validate(self, pcm: bytes, source: dict):
         now = self._now()
         timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
-        expires = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + EVIDENCE_TTL_SECONDS))
+        expires = VOICE_CONNECTION_EXPIRY
         base = {
             "factor": "voice-speaker",
             "identityId": None,

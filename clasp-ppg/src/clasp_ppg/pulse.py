@@ -6,10 +6,21 @@ import numpy as np
 from scipy.signal import cheby2, filtfilt, resample_poly
 
 
-def live_config():
-    """No independent Pulse-PPG + morphology calibration exists yet."""
+def live_config(profile_path=None):
+    """Load the explicitly experimental, profile-bound local demo fit, if present."""
+    import hashlib
+    import json
     from .matching import MatchingConfig
-    return MatchingConfig(mode='experimental', threshold=None)
+    if profile_path is None:
+        return MatchingConfig(mode='experimental', threshold=None)
+    try:
+        profile_path = Path(profile_path)
+        fit = json.loads(profile_path.with_name('ppg-demo-thresholds.json').read_text())
+        if fit['profile_sha256'] != hashlib.sha256(profile_path.read_bytes()).hexdigest() or fit['purpose'] != 'experimental-demo':
+            raise ValueError('Fit does not match current enrollment')
+        return MatchingConfig(mode='experimental', threshold=float(fit['similarity_min']), morphology_threshold=float(fit['morphology_max']), morphology_polarity_invariant=fit.get('morphology_polarity_invariant') is True)
+    except (OSError, KeyError, ValueError, TypeError):
+        return MatchingConfig(mode='experimental', threshold=None)
 
 
 class PulsePPGEmbedder:

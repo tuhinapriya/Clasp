@@ -8,6 +8,18 @@ import { ProtectedPaymentTool, requestScope, type PaymentGateway } from '../src/
 const args = { amountCents: 500, merchantId: 'clasp_demo_merchant', currency: 'usd' };
 const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+test('voice evidence remains available until explicitly invalidated while stale PPG expires', () => {
+  let now = 10_000;
+  const evidence = new BiometricEvidenceService(() => now);
+  assert.equal(evidence.record({ factor: 'voice-speaker', decision: 'MATCH', subjectId: 'primary-user', verifier: 'voice', verifiedAt: new Date(now).toISOString(), expiresAt: '9999-12-31T23:59:59Z', simulated: false }), true);
+  assert.equal(evidence.record({ factor: 'polar-ppg', decision: 'MATCH', subjectId: 'primary-user', verifier: 'polar', verifiedAt: new Date(now).toISOString(), expiresAt: new Date(now + 15_000).toISOString(), simulated: false }), true);
+  now += 60_000;
+  assert.equal(evidence.snapshot().voiceSpeaker.status, 'MATCH');
+  assert.equal(evidence.snapshot().polarPpg.status, 'EXPIRED');
+  evidence.invalidate('voice-speaker', 'Vexo disconnected');
+  assert.equal(evidence.snapshot().voiceSpeaker.status, 'UNAVAILABLE');
+});
+
 function setup() {
   let now = 10_000;
   const evidence = new BiometricEvidenceService(() => now);

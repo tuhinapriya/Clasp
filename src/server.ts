@@ -28,6 +28,8 @@ const claspAgent = createClaspAgent(payments);
 const mastra = new Mastra({ agents: { claspAgent } });
 const modelId = process.env.MODEL_ID ?? 'google/gemini-3.8-flash';
 const requestResults = new Map<string, Promise<Record<string, unknown>>>();
+type DemoTurn = { createdAt: number; generation: number; transcript?: string; work?: Promise<Record<string, unknown>> };
+const demoTurns = new Map<string, DemoTurn>();
 let vexoBridge: ChildProcessWithoutNullStreams | null = null;
 let vexoBridgeGeneration = 0;
 let vexoBridgeReady = false;
@@ -109,7 +111,7 @@ function setVexoConnection(status: ConnectionStatus, detail: string, bandNumber:
   hardwareState.vexo.detail = detail;
   hardwareState.vexo.bandNumber = status === 'connected' ? bandNumber : null;
   hardwareState.vexo.name = status === 'connected' ? name : null;
-  if (status !== 'connected') hardwareState.vexo.microphoneOn = false;
+  if (status !== 'connected') { hardwareState.vexo.microphoneOn = false; voiceCaptureActive = false; }
   publish('hardware.vexo.connection', { status, detail, bandNumber: hardwareState.vexo.bandNumber, name: hardwareState.vexo.name });
 }
 
@@ -266,6 +268,7 @@ function handleVexoMessage(generation: number, message: Record<string, any>) {
       const accepted = message.simulated === false && sourceIsCurrentBand && biometrics.record(result);
       if (!sourceIsCurrentBand) biometrics.invalidate('voice-speaker', 'Vexo disconnected or changed before speaker verification completed.');
       publish('identity.voice_verification', {
+        turnId: message.turnId,
         decision: accepted ? decision : 'UNCERTAIN',
         similarity: result.similarity,
         identityId: result.identityId,
@@ -278,9 +281,12 @@ function handleVexoMessage(generation: number, message: Record<string, any>) {
       });
       return;
     }
-    case 'voice.transcription':
+    case 'voice.transcription': {
+      const turn = typeof message.turnId === 'string' ? demoTurns.get(message.turnId) : undefined;
+      if (turn && Date.now() - turn.createdAt < 120_000 && hardwareState.vexo.status === 'connected' && message.source?.device === hardwareState.vexo.name && message.source?.bandNumber === hardwareState.vexo.bandNumber && typeof message.text === 'string' && message.text.trim().length > 0) turn.transcript = message.text.trim().slice(0, 1000);
       publish('voice.transcription', { turnId: message.turnId, text: typeof message.text === 'string' ? message.text.slice(0, 1000) : '', speakerDecision: message.speakerDecision, reason: typeof message.reason === 'string' ? message.reason.slice(0, 240) : null, source: message.source, local: true });
       return;
+    }
     case 'voice.error':
       publish('voice.error', { reason: typeof message.reason === 'string' ? message.reason.slice(0, 240) : 'Local voice verifier error.' });
       return;
@@ -392,6 +398,37 @@ app.post('/api/hardware/vexo/disconnect', (_req, res) => {
   }
   stopVexoBridge('Disconnected from the Clasp dashboard.');
   res.status(202).json({ disconnected: true });
+});
+
+app.post('/api/demo/listen', (req, res) => {
+  if (identityMode !== 'biometric') return res.status(403).json({ error: 'Real biometric mode is required for this demo.' });
+  if (!vexoBridgeReady || hardwareState.vexo.status !== 'connected' || !vexoBridge?.stdin.writable) return res.status(409).json({ error: 'Connect the Vexo band before listening.' });
+  if (voiceCaptureActive) return res.status(409).json({ error: 'Another voice capture is active.' });
+  for (const [id, turn] of demoTurns) if (Date.now() - turn.createdAt > 120_000) demoTurns.delete(id);
+  biometrics.invalidate('voice-speaker', 'New spoken request requires fresh voice verification.');
+  const turnId = randomUUID();
+  demoTurns.set(turnId, { createdAt: Date.now(), generation: vexoBridgeGeneration });
+  voiceCaptureActive = true;
+  vexoBridge.stdin.write(`${JSON.stringify({ command: 'capture-voice', kind: 'agent-turn', turnId })}\n`);
+  publish('demo.listening', { turnId, simulated: false, source: 'Vexo microphone' });
+  res.status(202).json({ turnId, simulated: false });
+});
+
+app.post('/api/demo/run', async (req, res) => {
+  const turnId = typeof req.body?.turnId === 'string' ? req.body.turnId : '';
+  const turn = demoTurns.get(turnId);
+  if (!turn || Date.now() - turn.createdAt >= 120_000 || !turn.transcript || turn.generation !== vexoBridgeGeneration || hardwareState.vexo.status !== 'connected') return res.status(409).json({ error: 'No fresh completed Vexo recording is available. Start listening again.' });
+  if (!process.env.GOOGLE_API_KEY) return res.status(503).json({ error: 'Google model is not configured.' });
+  if (!turn.work) {
+    const transcript = turn.transcript;
+    publish('demo.reasoning', { requestId: turnId, simulated: false });
+    turn.work = requestScope.run({ requestId: turnId, demo: true, getEvidence: () => biometrics.snapshot(), isStillValid: () => vexoBridgeReady && hardwareState.vexo.status === 'connected' && turn.generation === vexoBridgeGeneration }, async () => {
+      const result = await mastra.getAgentById('clasp-agent').generate(transcript);
+      return { requestId: turnId, answer: result.text || 'The model returned no text.', usedRealLlm: true, model: modelId, simulatedBiometricDecisions: false };
+    });
+  }
+  try { res.json(await turn.work); }
+  catch { res.status(502).json({ error: 'The Google model request failed.' }); }
 });
 
 app.post('/api/voice/register', (req, res) => {
